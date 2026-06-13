@@ -27,15 +27,28 @@ It's a static site — host it anywhere. The easiest free option is **GitHub Pag
 3. Open the published URL on your phone, then **Add to Home Screen** to install
    it as a standalone offline app.
 
-To run locally:
+To run locally (needs [Node.js](https://nodejs.org)):
 
 ```bash
-python3 -m http.server 8080
-# then open http://localhost:8080
+npm install
+npm run web   # → http://localhost:8080
 ```
 
-Opening `index.html` directly works too, but the offline service worker only
-activates when served over http(s).
+Serve over http(s) like this rather than opening `index.html` directly — the
+PDF viewer and offline service worker don't run from `file://`.
+
+### Build it on your computer
+
+Setting up a machine to edit the app and build the APK yourself:
+
+- **Windows:** see **[SETUP-WINDOWS.md](SETUP-WINDOWS.md)** for a full
+  step-by-step guide (tools, web preview, and local APK build).
+- **macOS / Linux:** install Node + a JDK 21 + the Android SDK, then
+  `npm install`, `npm run add:android`, and `npm run build:apk`.
+
+Don't want local Android tooling? Push your change and let the **Build Android
+APK** GitHub Action produce the APK for you (Actions tab → Run workflow →
+download the artifact).
 
 ## How the estimate is calculated
 
