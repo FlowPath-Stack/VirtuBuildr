@@ -44,6 +44,17 @@ jobs:
           npx cap add android
           npx cap sync android
 
+      - name: Auto-version the build
+        run: |
+          # Bump versionCode every CI run so the APK always installs as an
+          # update over the previous one. Offset keeps it ahead of local builds.
+          VC=$((github_run_number + 100))
+          sed -i "s/versionCode .*/versionCode ${VC}/" android/app/build.gradle
+          sed -i "s/versionName \".*\"/versionName \"1.1.${github_run_number}\"/" android/app/build.gradle
+          grep -E "versionCode|versionName" android/app/build.gradle
+        env:
+          github_run_number: ${{ github.run_number }}
+
       - name: Build debug APK
         run: |
           cd android

@@ -230,9 +230,22 @@ if (window.pdfjsLib) {
   pdfjsLib.GlobalWorkerOptions.workerSrc = "pdf.worker.min.js";
 }
 
+function fileToArrayBuffer(file) {
+  // Blob.arrayBuffer() is missing on some older Android WebViews — fall back.
+  if (typeof file.arrayBuffer === "function") return file.arrayBuffer();
+  return new Promise((resolve, reject) => {
+    const fr = new FileReader();
+    fr.onload = () => resolve(fr.result);
+    fr.onerror = () => reject(fr.error);
+    fr.readAsArrayBuffer(file);
+  });
+}
+
 async function loadPdf(file) {
-  const buf = await file.arrayBuffer();
   try {
+    if (!window.pdfjsLib) { toast("PDF engine not loaded"); return; }
+    toast("Opening PDF…");
+    const buf = await fileToArrayBuffer(file);
     pdfDoc = await pdfjsLib.getDocument({ data: buf }).promise;
     pdfScale = 1;
     $("pdfEmpty").style.display = "none";
@@ -241,7 +254,7 @@ async function loadPdf(file) {
     updateTiltHint();
     toast(`Loaded ${pdfDoc.numPages} page${pdfDoc.numPages > 1 ? "s" : ""}`);
   } catch (err) {
-    toast("Could not open PDF");
+    toast("Could not open PDF: " + (err && err.message ? err.message : err));
     console.error(err);
   }
 }
@@ -251,7 +264,9 @@ async function renderAllPages() {
   const container = $("pdfPages");
   container.innerHTML = `<p class="pdf-pagenote">${pdfDoc.numPages} page(s) · pinch to zoom, or tilt to landscape</p>`;
 
-  const viewportWidth = $("pdfViewport").clientWidth - 24;
+  // clientWidth is 0 when the tab is hidden; fall back to the window width.
+  const measured = $("pdfViewport").clientWidth;
+  const viewportWidth = (measured > 0 ? measured : window.innerWidth - 32) - 24;
   const dpr = Math.min(window.devicePixelRatio || 1, 2);
 
   for (let n = 1; n <= pdfDoc.numPages; n++) {
@@ -392,9 +407,12 @@ function init() {
     toast("Added");
   });
 
-  // PDF
+  // PDF — trigger the (visually hidden) input from a real button; a
+  // display:none input wrapped in a label does not open the Android picker.
+  $("uploadBtn").addEventListener("click", () => $("pdfInput").click());
   $("pdfInput").addEventListener("change", (e) => {
     if (e.target.files && e.target.files[0]) loadPdf(e.target.files[0]);
+    e.target.value = ""; // allow re-selecting the same file
   });
   $("zoomIn").addEventListener("click", () => setZoom(0.25));
   $("zoomOut").addEventListener("click", () => setZoom(-0.25));

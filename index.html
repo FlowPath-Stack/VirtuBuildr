@@ -162,10 +162,8 @@
     <!-- ============ PLANS (PDF) TAB ============ -->
     <div class="tab-panel" id="tab-plans" role="tabpanel">
       <div class="plans-toolbar">
-        <label class="primary-btn file-btn">
-          Upload PDF
-          <input type="file" id="pdfInput" accept="application/pdf" hidden />
-        </label>
+        <button type="button" id="uploadBtn" class="primary-btn file-btn">Upload PDF</button>
+        <input type="file" id="pdfInput" accept="application/pdf,.pdf" class="visually-hidden" />
         <div class="zoom-controls" id="zoomControls" hidden>
           <button type="button" id="zoomOut" class="icon-btn" aria-label="Zoom out">−</button>
           <span id="zoomLabel">100%</span>

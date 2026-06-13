@@ -124,6 +124,12 @@ input[type="range"] { padding: 0; height: 28px; background: transparent; accent-
 /* ===== Plans / PDF tab ===== */
 .plans-toolbar { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
 .file-btn { display: inline-flex; align-items: center; cursor: pointer; }
+/* Visually hidden but still focusable/clickable — display:none inputs don't
+   open the file chooser inside the Android WebView. */
+.visually-hidden {
+  position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
+  overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; opacity: 0;
+}
 .zoom-controls { display: flex; align-items: center; gap: 10px; background: var(--bg-elev); border: 1px solid var(--border); border-radius: 999px; padding: 4px 6px; }
 .zoom-controls span { font-size: 13px; color: var(--text-dim); min-width: 42px; text-align: center; }
 .icon-btn {
