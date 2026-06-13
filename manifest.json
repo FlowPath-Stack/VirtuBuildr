@@ -1,0 +1,19 @@
+{
+  "name": "VirtuBuildr — BIM Estimator",
+  "short_name": "VirtuBuildr",
+  "description": "Estimate BIM modeling hours, cost, and timeline from your phone.",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#0f172a",
+  "theme_color": "#0f172a",
+  "icons": [
+    {
+      "src": "icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}
