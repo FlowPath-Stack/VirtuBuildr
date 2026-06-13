@@ -1,0 +1,16 @@
+# Dependencies
+node_modules/
+
+# Generated web bundle (built from root assets by scripts/copy-web.mjs)
+www/
+
+# Generated native project (recreated by `npx cap add android` in CI/local)
+android/
+
+# Build output
+*.apk
+*.aab
+
+# OS / editor
+.DS_Store
+*.log

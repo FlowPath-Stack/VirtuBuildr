@@ -1,0 +1,80 @@
+name: Build Android APK
+
+# Build the installable APK on demand (Actions tab → Run workflow), on pushes
+# to this branch, and attach it to GitHub Releases when you push a v* tag.
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - claude/mobile-bim-estimates-rm00p8
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Add Android platform & sync web assets
+        run: |
+          npm run copy:web
+          npx cap add android
+          npx cap sync android
+
+      - name: Auto-version the build
+        run: |
+          # Bump versionCode every CI run so the APK always installs as an
+          # update over the previous one. Offset keeps it ahead of local builds.
+          VC=$((github_run_number + 100))
+          sed -i "s/versionCode .*/versionCode ${VC}/" android/app/build.gradle
+          sed -i "s/versionName \".*\"/versionName \"1.1.${github_run_number}\"/" android/app/build.gradle
+          grep -E "versionCode|versionName" android/app/build.gradle
+        env:
+          github_run_number: ${{ github.run_number }}
+
+      - name: Build debug APK
+        run: |
+          cd android
+          chmod +x gradlew
+          ./gradlew assembleDebug --no-daemon
+
+      - name: Rename APK
+        run: |
+          mkdir -p dist
+          cp android/app/build/outputs/apk/debug/app-debug.apk dist/VirtuBuildr-debug.apk
+
+      - name: Upload APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: VirtuBuildr-APK
+          path: dist/VirtuBuildr-debug.apk
+          if-no-files-found: error
+
+      - name: Attach APK to Release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/VirtuBuildr-debug.apk

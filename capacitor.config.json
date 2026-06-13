@@ -1,0 +1,8 @@
+{
+  "appId": "com.flowpath.virtubuildr",
+  "appName": "VirtuBuildr",
+  "webDir": "www",
+  "android": {
+    "allowMixedContent": false
+  }
+}

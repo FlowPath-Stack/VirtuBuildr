@@ -1,0 +1,22 @@
+{
+  "name": "virtubuildr",
+  "version": "1.0.0",
+  "description": "Mobile-first BIM modeling estimator — web app + Android APK (Capacitor).",
+  "private": true,
+  "scripts": {
+    "web": "node scripts/serve.mjs",
+    "copy:web": "node scripts/copy-web.mjs",
+    "add:android": "npm run copy:web && cap add android",
+    "open:android": "cap open android",
+    "sync": "npm run copy:web && cap sync",
+    "build:apk": "npm run sync && cd android && ./gradlew assembleDebug",
+    "build:apk:win": "npm run sync && cd android && gradlew.bat assembleDebug"
+  },
+  "dependencies": {
+    "@capacitor/android": "^7.0.0",
+    "@capacitor/core": "^7.0.0"
+  },
+  "devDependencies": {
+    "@capacitor/cli": "^7.0.0"
+  }
+}
