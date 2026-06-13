@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, viewport-fit=cover" />
   <meta name="theme-color" content="#0f172a" />
   <meta name="description" content="Estimate BIM modeling hours, cost, and timeline from your phone." />
   <title>VirtuBuildr — BIM Estimator</title>
@@ -17,190 +17,273 @@
       <span class="logo" aria-hidden="true">▦</span>
       <div>
         <h1>VirtuBuildr</h1>
-        <p class="tagline">BIM Modeling Estimator</p>
+        <p class="tagline" id="barSubtitle">BIM Modeling Estimator</p>
       </div>
     </div>
     <button id="resetBtn" class="ghost-btn" type="button" title="Reset to defaults">Reset</button>
   </header>
 
   <main>
-    <form id="estimator" autocomplete="off">
-      <!-- PROJECT -->
-      <section class="card">
-        <h2>Project</h2>
+    <!-- ============ ESTIMATE TAB ============ -->
+    <div class="tab-panel active" id="tab-estimate" role="tabpanel">
+      <form id="estimator" autocomplete="off">
+        <!-- PROJECT -->
+        <section class="card accordion open">
+          <button type="button" class="acc-head"><span>Project</span><span class="chev">⌄</span></button>
+          <div class="acc-body">
+            <label class="field">
+              <span>Project name</span>
+              <input type="text" id="projectName" placeholder="e.g. Riverside Office Tower" />
+            </label>
+            <label class="field">
+              <span>Project type</span>
+              <select id="projectType">
+                <option value="0.9">Residential</option>
+                <option value="1.0" selected>Commercial / Office</option>
+                <option value="1.2">Industrial / Warehouse</option>
+                <option value="1.4">Healthcare / Lab</option>
+                <option value="1.3">Infrastructure</option>
+              </select>
+            </label>
+            <div class="row">
+              <label class="field">
+                <span>Floor area</span>
+                <input type="number" id="area" inputmode="decimal" min="0" step="any" value="50000" />
+              </label>
+              <label class="field unit-field">
+                <span>Units</span>
+                <select id="areaUnit">
+                  <option value="1" selected>ft²</option>
+                  <option value="10.7639">m²</option>
+                </select>
+              </label>
+            </div>
+            <label class="field">
+              <span>Number of floors / stories</span>
+              <input type="number" id="floors" inputmode="numeric" min="1" step="1" value="3" />
+            </label>
+          </div>
+        </section>
 
-        <label class="field">
-          <span>Project name</span>
-          <input type="text" id="projectName" placeholder="e.g. Riverside Office Tower" />
+        <!-- DISCIPLINES -->
+        <section class="card accordion">
+          <button type="button" class="acc-head"><span>Disciplines to model</span><span class="chev">⌄</span></button>
+          <div class="acc-body">
+            <p class="hint">Toggle the trades included in scope.</p>
+            <div id="disciplines" class="chips"></div>
+          </div>
+        </section>
+
+        <!-- DETAIL & SOURCE -->
+        <section class="card accordion">
+          <button type="button" class="acc-head"><span>Detail &amp; inputs</span><span class="chev">⌄</span></button>
+          <div class="acc-body">
+            <label class="field">
+              <span>Level of Development (LOD)</span>
+              <select id="lod">
+                <option value="0.25">LOD 100 — Conceptual</option>
+                <option value="0.5">LOD 200 — Schematic</option>
+                <option value="1.0" selected>LOD 300 — Design / Coordination</option>
+                <option value="1.3">LOD 350 — Coordinated</option>
+                <option value="1.8">LOD 400 — Fabrication</option>
+                <option value="2.5">LOD 500 — As-built</option>
+              </select>
+            </label>
+            <label class="field">
+              <span>Source material</span>
+              <select id="source">
+                <option value="0.7">Existing BIM / Revit model</option>
+                <option value="1.0" selected>CAD / DWG drawings</option>
+                <option value="1.2">PDF / 2D drawings</option>
+                <option value="1.4">Point cloud / laser scan</option>
+                <option value="1.5">Concept / sketches only</option>
+              </select>
+            </label>
+            <label class="field">
+              <span>Complexity</span>
+              <select id="complexity">
+                <option value="0.85">Simple — repetitive layout</option>
+                <option value="1.0" selected>Standard</option>
+                <option value="1.25">Complex — irregular geometry</option>
+                <option value="1.5">Very complex — bespoke / dense MEP</option>
+              </select>
+            </label>
+          </div>
+        </section>
+
+        <!-- DELIVERY & RATES -->
+        <section class="card accordion">
+          <button type="button" class="acc-head"><span>Delivery &amp; rates</span><span class="chev">⌄</span></button>
+          <div class="acc-body">
+            <label class="field">
+              <span>Schedule</span>
+              <select id="rush">
+                <option value="1.0" selected>Standard</option>
+                <option value="1.15">Expedited (+15%)</option>
+                <option value="1.3">Rush (+30%)</option>
+              </select>
+            </label>
+            <div class="row">
+              <label class="field">
+                <span>Blended rate / hr</span>
+                <input type="number" id="rate" inputmode="decimal" min="0" step="any" value="65" />
+              </label>
+              <label class="field unit-field">
+                <span>Currency</span>
+                <select id="currency">
+                  <option value="USD" selected>USD $</option>
+                  <option value="EUR">EUR €</option>
+                  <option value="GBP">GBP £</option>
+                  <option value="CAD">CAD $</option>
+                  <option value="AUD">AUD $</option>
+                  <option value="INR">INR ₹</option>
+                </select>
+              </label>
+            </div>
+            <div class="row">
+              <label class="field">
+                <span>Team size</span>
+                <input type="number" id="team" inputmode="numeric" min="1" step="1" value="2" />
+              </label>
+              <label class="field">
+                <span>Productive hrs / day</span>
+                <input type="number" id="hoursPerDay" inputmode="decimal" min="1" step="any" value="6" />
+              </label>
+            </div>
+            <label class="field">
+              <span>Contingency buffer: <strong id="contingencyLabel">15%</strong></span>
+              <input type="range" id="contingency" min="0" max="40" step="5" value="15" />
+            </label>
+          </div>
+        </section>
+      </form>
+    </div>
+
+    <!-- ============ PLANS (PDF) TAB ============ -->
+    <div class="tab-panel" id="tab-plans" role="tabpanel">
+      <div class="plans-toolbar">
+        <label class="primary-btn file-btn">
+          Upload PDF
+          <input type="file" id="pdfInput" accept="application/pdf" hidden />
         </label>
-
-        <label class="field">
-          <span>Project type</span>
-          <select id="projectType">
-            <option value="0.9">Residential</option>
-            <option value="1.0" selected>Commercial / Office</option>
-            <option value="1.2">Industrial / Warehouse</option>
-            <option value="1.4">Healthcare / Lab</option>
-            <option value="1.3">Infrastructure</option>
-          </select>
-        </label>
-
-        <div class="row">
-          <label class="field">
-            <span>Floor area</span>
-            <input type="number" id="area" inputmode="decimal" min="0" step="any" value="50000" />
-          </label>
-          <label class="field unit-field">
-            <span>Units</span>
-            <select id="areaUnit">
-              <option value="1" selected>ft²</option>
-              <option value="10.7639">m²</option>
-            </select>
-          </label>
-        </div>
-
-        <label class="field">
-          <span>Number of floors / stories</span>
-          <input type="number" id="floors" inputmode="numeric" min="1" step="1" value="3" />
-        </label>
-      </section>
-
-      <!-- DISCIPLINES -->
-      <section class="card">
-        <h2>Disciplines to model</h2>
-        <p class="hint">Toggle the trades included in scope.</p>
-        <div id="disciplines" class="chips"></div>
-      </section>
-
-      <!-- DETAIL & SOURCE -->
-      <section class="card">
-        <h2>Detail &amp; inputs</h2>
-
-        <label class="field">
-          <span>Level of Development (LOD)</span>
-          <select id="lod">
-            <option value="0.25">LOD 100 — Conceptual</option>
-            <option value="0.5">LOD 200 — Schematic</option>
-            <option value="1.0" selected>LOD 300 — Design / Coordination</option>
-            <option value="1.3">LOD 350 — Coordinated</option>
-            <option value="1.8">LOD 400 — Fabrication</option>
-            <option value="2.5">LOD 500 — As-built</option>
-          </select>
-        </label>
-
-        <label class="field">
-          <span>Source material</span>
-          <select id="source">
-            <option value="0.7">Existing BIM / Revit model</option>
-            <option value="1.0" selected>CAD / DWG drawings</option>
-            <option value="1.2">PDF / 2D drawings</option>
-            <option value="1.4">Point cloud / laser scan</option>
-            <option value="1.5">Concept / sketches only</option>
-          </select>
-        </label>
-
-        <label class="field">
-          <span>Complexity</span>
-          <select id="complexity">
-            <option value="0.85">Simple — repetitive layout</option>
-            <option value="1.0" selected>Standard</option>
-            <option value="1.25">Complex — irregular geometry</option>
-            <option value="1.5">Very complex — bespoke / dense MEP</option>
-          </select>
-        </label>
-      </section>
-
-      <!-- DELIVERY & RATES -->
-      <section class="card">
-        <h2>Delivery &amp; rates</h2>
-
-        <label class="field">
-          <span>Schedule</span>
-          <select id="rush">
-            <option value="1.0" selected>Standard</option>
-            <option value="1.15">Expedited (+15%)</option>
-            <option value="1.3">Rush (+30%)</option>
-          </select>
-        </label>
-
-        <div class="row">
-          <label class="field">
-            <span>Blended rate / hr</span>
-            <input type="number" id="rate" inputmode="decimal" min="0" step="any" value="65" />
-          </label>
-          <label class="field unit-field">
-            <span>Currency</span>
-            <select id="currency">
-              <option value="USD" selected>USD $</option>
-              <option value="EUR">EUR €</option>
-              <option value="GBP">GBP £</option>
-              <option value="CAD">CAD $</option>
-              <option value="AUD">AUD $</option>
-              <option value="INR">INR ₹</option>
-            </select>
-          </label>
-        </div>
-
-        <div class="row">
-          <label class="field">
-            <span>Team size</span>
-            <input type="number" id="team" inputmode="numeric" min="1" step="1" value="2" />
-          </label>
-          <label class="field">
-            <span>Productive hrs / day</span>
-            <input type="number" id="hoursPerDay" inputmode="decimal" min="1" step="any" value="6" />
-          </label>
-        </div>
-
-        <label class="field">
-          <span>Contingency buffer: <strong id="contingencyLabel">15%</strong></span>
-          <input type="range" id="contingency" min="0" max="40" step="5" value="15" />
-        </label>
-      </section>
-    </form>
-
-    <!-- RESULTS -->
-    <section class="card results" id="results" aria-live="polite">
-      <div class="headline">
-        <div class="metric">
-          <span class="metric-label">Estimated cost</span>
-          <span class="metric-value" id="totalCost">—</span>
-        </div>
-        <div class="metric">
-          <span class="metric-label">Total hours</span>
-          <span class="metric-value" id="totalHours">—</span>
-        </div>
-        <div class="metric">
-          <span class="metric-label">Duration</span>
-          <span class="metric-value" id="duration">—</span>
+        <div class="zoom-controls" id="zoomControls" hidden>
+          <button type="button" id="zoomOut" class="icon-btn" aria-label="Zoom out">−</button>
+          <span id="zoomLabel">100%</span>
+          <button type="button" id="zoomIn" class="icon-btn" aria-label="Zoom in">+</button>
         </div>
       </div>
 
-      <table class="breakdown">
-        <thead>
-          <tr><th>Discipline</th><th>Hours</th><th>Cost</th></tr>
-        </thead>
-        <tbody id="breakdownBody"></tbody>
-      </table>
+      <div class="tilt-hint" id="tiltHint" hidden>
+        📱 Tilt your phone to <strong>landscape</strong> for a wider view of the drawing.
+      </div>
 
-      <p class="disclaimer">
-        Parametric estimate for planning only. Tune the rate, contingency, and
-        productivity assumptions to your firm's historical data.
-      </p>
-    </section>
+      <div class="pdf-viewport" id="pdfViewport">
+        <div class="pdf-empty" id="pdfEmpty">
+          <span class="big-icon">📄</span>
+          <p>No drawing loaded.</p>
+          <p class="hint">Upload a PDF of your plans to view them here while you build the estimate and equipment list.</p>
+        </div>
+        <div id="pdfPages"></div>
+      </div>
+    </div>
 
-    <div class="actions">
-      <button id="copyBtn" class="primary-btn" type="button">Copy summary</button>
-      <button id="printBtn" class="secondary-btn" type="button">Save / Print PDF</button>
+    <!-- ============ EQUIPMENT TAB ============ -->
+    <div class="tab-panel" id="tab-equipment" role="tabpanel">
+      <section class="card">
+        <h2>Add equipment</h2>
+        <form id="equipForm" autocomplete="off">
+          <label class="field">
+            <span>Description / tag</span>
+            <input type="text" id="eqName" placeholder="e.g. AHU-1, Rooftop Unit" required />
+          </label>
+          <div class="row">
+            <label class="field">
+              <span>Category</span>
+              <select id="eqCategory">
+                <option>Mechanical</option>
+                <option>Electrical</option>
+                <option>Plumbing</option>
+                <option>Fire Protection</option>
+                <option>Structural</option>
+                <option>Architectural</option>
+                <option>Other</option>
+              </select>
+            </label>
+            <label class="field unit-field">
+              <span>Qty</span>
+              <input type="number" id="eqQty" inputmode="numeric" min="1" step="1" value="1" />
+            </label>
+          </div>
+          <button type="submit" class="primary-btn full">+ Add to list</button>
+        </form>
+      </section>
+
+      <section class="card">
+        <h2>Equipment list <span class="badge" id="eqCount">0</span></h2>
+        <ul class="equip-list" id="equipList"></ul>
+        <p class="hint" id="equipEmpty">Nothing yet — add items above as you read them off the plans.</p>
+      </section>
+    </div>
+
+    <!-- ============ SUMMARY TAB ============ -->
+    <div class="tab-panel" id="tab-summary" role="tabpanel">
+      <section class="card results" id="results" aria-live="polite">
+        <div class="headline">
+          <div class="metric">
+            <span class="metric-label">Estimated cost</span>
+            <span class="metric-value" id="totalCost">—</span>
+          </div>
+          <div class="metric">
+            <span class="metric-label">Total hours</span>
+            <span class="metric-value" id="totalHours">—</span>
+          </div>
+          <div class="metric">
+            <span class="metric-label">Duration</span>
+            <span class="metric-value" id="duration">—</span>
+          </div>
+        </div>
+
+        <table class="breakdown">
+          <thead>
+            <tr><th>Discipline</th><th>Hours</th><th>Cost</th></tr>
+          </thead>
+          <tbody id="breakdownBody"></tbody>
+        </table>
+
+        <div id="equipSummary"></div>
+
+        <p class="disclaimer">
+          Parametric estimate for planning only. Tune the rate, contingency, and
+          productivity assumptions to your firm's historical data.
+        </p>
+      </section>
+
+      <div class="actions">
+        <button id="copyBtn" class="primary-btn" type="button">Copy summary</button>
+        <button id="printBtn" class="secondary-btn" type="button">Save / Print PDF</button>
+      </div>
     </div>
   </main>
 
-  <footer>
-    <p>Works offline · Add to Home Screen to install</p>
-  </footer>
+  <!-- ============ BOTTOM TAB BAR ============ -->
+  <nav class="tabbar" role="tablist">
+    <button class="tab-btn active" data-tab="estimate" role="tab">
+      <span class="tab-ico">🧮</span><span>Estimate</span>
+    </button>
+    <button class="tab-btn" data-tab="plans" role="tab">
+      <span class="tab-ico">📄</span><span>Plans</span>
+    </button>
+    <button class="tab-btn" data-tab="equipment" role="tab">
+      <span class="tab-ico">🔧</span><span>Equipment</span>
+    </button>
+    <button class="tab-btn" data-tab="summary" role="tab">
+      <span class="tab-ico">📊</span><span>Summary</span>
+    </button>
+  </nav>
 
   <div id="toast" class="toast" role="status"></div>
 
+  <script src="pdf.min.js"></script>
   <script src="app.js"></script>
 </body>
 </html>

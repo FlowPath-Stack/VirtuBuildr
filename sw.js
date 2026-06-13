@@ -1,5 +1,5 @@
 /* VirtuBuildr service worker — offline-first caching */
-const CACHE = "virtubuildr-v1";
+const CACHE = "virtubuildr-v2";
 const ASSETS = [
   "./",
   "./index.html",
@@ -7,6 +7,8 @@ const ASSETS = [
   "./app.js",
   "./manifest.json",
   "./icon.svg",
+  "./pdf.min.js",
+  "./pdf.worker.min.js",
 ];
 
 self.addEventListener("install", (event) => {

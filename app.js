@@ -1,6 +1,6 @@
 /* VirtuBuildr — BIM Modeling Estimator
- * Parametric engine. All productivity figures are editable assumptions and
- * should be calibrated against your firm's historical project data.
+ * Parametric engine + PDF plan viewer + equipment takeoff list.
+ * All productivity figures are editable assumptions — calibrate to your data.
  */
 
 // Base modeling productivity at LOD 300, standard complexity:
@@ -15,16 +15,46 @@ const DISCIPLINES = [
   { id: "site", label: "Site / Civil", rate: 3.5, on: false },
 ];
 
-const CURRENCY = {
-  USD: "$", EUR: "€", GBP: "£", CAD: "CA$", AUD: "A$", INR: "₹",
-};
+const CURRENCY = { USD: "$", EUR: "€", GBP: "£", CAD: "CA$", AUD: "A$", INR: "₹" };
 
 const STORAGE_KEY = "virtubuildr.estimate.v1";
+const EQUIP_KEY = "virtubuildr.equipment.v1";
 const $ = (id) => document.getElementById(id);
 
 let lastResult = null;
+let equipment = [];
+let pdfDoc = null;
+let pdfScale = 1;
 
-/* ---------- build discipline chips ---------- */
+/* ===================== TABS ===================== */
+const TAB_TITLES = {
+  estimate: "BIM Modeling Estimator",
+  plans: "Plan Viewer",
+  equipment: "Equipment Takeoff",
+  summary: "Estimate Summary",
+};
+function switchTab(name) {
+  document.querySelectorAll(".tab-panel").forEach((p) =>
+    p.classList.toggle("active", p.id === "tab-" + name)
+  );
+  document.querySelectorAll(".tab-btn").forEach((b) =>
+    b.classList.toggle("active", b.dataset.tab === name)
+  );
+  $("barSubtitle").textContent = TAB_TITLES[name] || "BIM Modeling Estimator";
+  if (name === "plans") updateTiltHint();
+  window.scrollTo(0, 0);
+}
+
+/* ===================== ACCORDIONS ===================== */
+function initAccordions() {
+  document.querySelectorAll(".accordion .acc-head").forEach((head) => {
+    head.addEventListener("click", () =>
+      head.closest(".accordion").classList.toggle("open")
+    );
+  });
+}
+
+/* ===================== DISCIPLINE CHIPS ===================== */
 function buildChips() {
   const wrap = $("disciplines");
   wrap.innerHTML = "";
@@ -42,17 +72,14 @@ function buildChips() {
     wrap.appendChild(label);
   });
 }
-
 function selectedDisciplines() {
-  return [...document.querySelectorAll("#disciplines input:checked")].map(
-    (cb) => cb.dataset.id
-  );
+  return [...document.querySelectorAll("#disciplines input:checked")].map((cb) => cb.dataset.id);
 }
 
-/* ---------- core calculation ---------- */
+/* ===================== CALCULATION ===================== */
 function calculate() {
   const areaRaw = parseFloat($("area").value) || 0;
-  const areaToFt2 = parseFloat($("areaUnit").value); // 1 for ft², 10.7639 for m²
+  const areaToFt2 = parseFloat($("areaUnit").value);
   const areaFt2 = areaRaw * areaToFt2;
   const kSqft = areaFt2 / 1000;
 
@@ -70,7 +97,6 @@ function calculate() {
   const factor = projectMult * lodMult * sourceMult * complexityMult;
   const active = selectedDisciplines();
 
-  // Per-discipline modeling hours
   const lines = [];
   let modelingHours = 0;
   DISCIPLINES.forEach((d) => {
@@ -80,17 +106,13 @@ function calculate() {
     lines.push({ label: d.label, hours: hrs });
   });
 
-  // Coordination / clash detection overhead — scales with multi-trade scope
   const coordRate = active.length >= 2 ? 0.08 + 0.03 * active.length : 0;
   const coordHours = modelingHours * Math.min(coordRate, 0.3);
-
-  // QA / setup overhead
   const qaHours = modelingHours * 0.12;
 
   const subtotal = modelingHours + coordHours + qaHours;
   const contingencyHours = subtotal * contingency;
-  const preRush = subtotal + contingencyHours;
-  const totalHours = preRush * rushMult;
+  const totalHours = (subtotal + contingencyHours) * rushMult;
 
   const cost = totalHours * rate;
   const days = totalHours / (team * hoursPerDay);
@@ -99,28 +121,21 @@ function calculate() {
     areaFt2, lines, modelingHours, coordHours, qaHours,
     contingencyHours: contingencyHours * rushMult,
     totalHours, cost, days, rate,
-    currency: $("currency").value,
-    activeCount: active.length,
+    currency: $("currency").value, activeCount: active.length,
   };
 }
 
-/* ---------- formatting ---------- */
-function fmtMoney(n, cur) {
-  const sym = CURRENCY[cur] || "$";
-  return sym + Math.round(n).toLocaleString();
-}
-function fmtHours(n) {
-  return Math.round(n).toLocaleString() + " h";
-}
+/* ===================== FORMATTING ===================== */
+function fmtMoney(n, cur) { return (CURRENCY[cur] || "$") + Math.round(n).toLocaleString(); }
+function fmtHours(n) { return Math.round(n).toLocaleString() + " h"; }
 function fmtDuration(days) {
   if (days <= 0) return "—";
   if (days < 1) return "<1 day";
-  const weeks = days / 5; // working days/week
   if (days < 10) return `${Math.ceil(days)} days`;
-  return `${weeks.toFixed(1)} wks (${Math.ceil(days)}d)`;
+  return `${(days / 5).toFixed(1)} wks (${Math.ceil(days)}d)`;
 }
 
-/* ---------- render ---------- */
+/* ===================== RENDER ESTIMATE ===================== */
 function recalc() {
   const r = calculate();
   lastResult = r;
@@ -131,13 +146,10 @@ function recalc() {
 
   const body = $("breakdownBody");
   body.innerHTML = "";
-
   const addRow = (label, hours, cls = "") => {
     const tr = document.createElement("tr");
     if (cls) tr.className = cls;
-    const cost = hours * r.rate;
-    tr.innerHTML =
-      `<td>${label}</td><td>${fmtHours(hours)}</td><td>${fmtMoney(cost, r.currency)}</td>`;
+    tr.innerHTML = `<td>${label}</td><td>${fmtHours(hours)}</td><td>${fmtMoney(hours * r.rate, r.currency)}</td>`;
     body.appendChild(tr);
   };
 
@@ -146,32 +158,147 @@ function recalc() {
     tr.className = "muted";
     tr.innerHTML = `<td colspan="3">Select at least one discipline.</td>`;
     body.appendChild(tr);
-    return;
+  } else {
+    r.lines.forEach((l) => addRow(l.label, l.hours));
+    if (r.coordHours > 0) addRow("Coordination / clash", r.coordHours, "muted");
+    addRow("QA &amp; setup", r.qaHours, "muted");
+    if (r.contingencyHours > 0) addRow("Contingency", r.contingencyHours, "muted");
+    addRow("Total", r.totalHours, "subtotal");
   }
 
-  r.lines.forEach((l) => addRow(l.label, l.hours));
-  if (r.coordHours > 0) addRow("Coordination / clash", r.coordHours, "muted");
-  addRow("QA &amp; setup", r.qaHours, "muted");
-  if (r.contingencyHours > 0) addRow("Contingency", r.contingencyHours, "muted");
-  addRow("Total", r.totalHours, "subtotal");
-
+  renderEquipSummary();
   saveState();
 }
 
-/* ---------- persistence ---------- */
+/* ===================== EQUIPMENT ===================== */
+function renderEquipment() {
+  const list = $("equipList");
+  list.innerHTML = "";
+  const totalQty = equipment.reduce((s, e) => s + (e.qty || 0), 0);
+  $("eqCount").textContent = totalQty;
+  $("equipEmpty").style.display = equipment.length ? "none" : "block";
+
+  equipment.forEach((e, i) => {
+    const li = document.createElement("li");
+    li.className = "equip-item";
+    li.innerHTML =
+      `<div class="eq-main">
+         <div class="eq-name"></div>
+         <div class="eq-meta"></div>
+       </div>
+       <span class="eq-qty">×${e.qty}</span>
+       <button class="eq-del" aria-label="Remove" data-i="${i}">×</button>`;
+    li.querySelector(".eq-name").textContent = e.name;
+    li.querySelector(".eq-meta").textContent = e.category;
+    li.querySelector(".eq-del").addEventListener("click", () => {
+      equipment.splice(i, 1);
+      saveEquipment();
+      renderEquipment();
+      renderEquipSummary();
+    });
+    list.appendChild(li);
+  });
+}
+
+function renderEquipSummary() {
+  const el = $("equipSummary");
+  if (!el) return;
+  if (!equipment.length) { el.innerHTML = ""; return; }
+  const byCat = {};
+  let total = 0;
+  equipment.forEach((e) => {
+    byCat[e.category] = (byCat[e.category] || 0) + e.qty;
+    total += e.qty;
+  });
+  const rows = Object.entries(byCat)
+    .map(([c, q]) => `<tr class="muted"><td>${c}</td><td></td><td>×${q}</td></tr>`)
+    .join("");
+  el.innerHTML =
+    `<h3>Equipment takeoff (${total} items)</h3>
+     <table class="breakdown"><tbody>${rows}</tbody></table>`;
+}
+
+function saveEquipment() {
+  try { localStorage.setItem(EQUIP_KEY, JSON.stringify(equipment)); } catch (e) {}
+}
+function loadEquipment() {
+  try { equipment = JSON.parse(localStorage.getItem(EQUIP_KEY)) || []; } catch (e) { equipment = []; }
+}
+
+/* ===================== PDF VIEWER ===================== */
+if (window.pdfjsLib) {
+  pdfjsLib.GlobalWorkerOptions.workerSrc = "pdf.worker.min.js";
+}
+
+async function loadPdf(file) {
+  const buf = await file.arrayBuffer();
+  try {
+    pdfDoc = await pdfjsLib.getDocument({ data: buf }).promise;
+    pdfScale = 1;
+    $("pdfEmpty").style.display = "none";
+    $("zoomControls").hidden = false;
+    await renderAllPages();
+    updateTiltHint();
+    toast(`Loaded ${pdfDoc.numPages} page${pdfDoc.numPages > 1 ? "s" : ""}`);
+  } catch (err) {
+    toast("Could not open PDF");
+    console.error(err);
+  }
+}
+
+async function renderAllPages() {
+  if (!pdfDoc) return;
+  const container = $("pdfPages");
+  container.innerHTML = `<p class="pdf-pagenote">${pdfDoc.numPages} page(s) · pinch to zoom, or tilt to landscape</p>`;
+
+  const viewportWidth = $("pdfViewport").clientWidth - 24;
+  const dpr = Math.min(window.devicePixelRatio || 1, 2);
+
+  for (let n = 1; n <= pdfDoc.numPages; n++) {
+    const page = await pdfDoc.getPage(n);
+    const unscaled = page.getViewport({ scale: 1 });
+    const fit = viewportWidth / unscaled.width;
+    const viewport = page.getViewport({ scale: fit * pdfScale });
+
+    const canvas = document.createElement("canvas");
+    const ctx = canvas.getContext("2d");
+    canvas.width = Math.floor(viewport.width * dpr);
+    canvas.height = Math.floor(viewport.height * dpr);
+    canvas.style.width = viewport.width + "px";
+    canvas.style.height = viewport.height + "px";
+    container.appendChild(canvas);
+
+    await page.render({
+      canvasContext: ctx,
+      viewport,
+      transform: dpr !== 1 ? [dpr, 0, 0, dpr, 0, 0] : null,
+    }).promise;
+  }
+}
+
+function setZoom(delta) {
+  pdfScale = Math.min(3, Math.max(0.5, pdfScale + delta));
+  $("zoomLabel").textContent = Math.round(pdfScale * 100) + "%";
+  renderAllPages();
+}
+
+function updateTiltHint() {
+  const portrait = window.matchMedia("(orientation: portrait)").matches;
+  const onPlans = $("tab-plans").classList.contains("active");
+  $("tiltHint").hidden = !(pdfDoc && portrait && onPlans);
+}
+
+/* ===================== PERSISTENCE ===================== */
 const INPUT_IDS = [
   "projectName", "projectType", "area", "areaUnit", "floors", "lod",
-  "source", "complexity", "rush", "rate", "currency", "team",
-  "hoursPerDay", "contingency",
+  "source", "complexity", "rush", "rate", "currency", "team", "hoursPerDay", "contingency",
 ];
-
 function saveState() {
   const state = {};
   INPUT_IDS.forEach((id) => (state[id] = $(id).value));
   state.disciplines = selectedDisciplines();
   try { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); } catch (e) {}
 }
-
 function loadState() {
   let state;
   try { state = JSON.parse(localStorage.getItem(STORAGE_KEY)); } catch (e) {}
@@ -185,19 +312,19 @@ function loadState() {
   }
   updateContingencyLabel();
 }
+function updateContingencyLabel() { $("contingencyLabel").textContent = $("contingency").value + "%"; }
 
-function updateContingencyLabel() {
-  $("contingencyLabel").textContent = $("contingency").value + "%";
-}
-
-/* ---------- summary text ---------- */
+/* ===================== SUMMARY TEXT ===================== */
 function summaryText() {
   const r = lastResult || calculate();
   const name = $("projectName").value.trim() || "Untitled project";
   const ft2 = Math.round(r.areaFt2).toLocaleString();
-  const lines = r.lines
-    .map((l) => `  • ${l.label}: ${fmtHours(l.hours)}`)
-    .join("\n");
+  const lines = r.lines.map((l) => `  • ${l.label}: ${fmtHours(l.hours)}`).join("\n");
+  let eq = "";
+  if (equipment.length) {
+    eq = "\n\nEquipment takeoff:\n" +
+      equipment.map((e) => `  • ${e.name} (${e.category}) ×${e.qty}`).join("\n");
+  }
   return (
 `VirtuBuildr — BIM Modeling Estimate
 Project: ${name}
@@ -208,13 +335,13 @@ ${lines}
 
 Total hours: ${fmtHours(r.totalHours)}
 Estimated cost: ${fmtMoney(r.cost, r.currency)}  (@ ${fmtMoney(r.rate, r.currency)}/hr)
-Duration: ${fmtDuration(r.days)}
+Duration: ${fmtDuration(r.days)}${eq}
 
 Planning estimate — calibrate to historical data.`
   );
 }
 
-/* ---------- toast ---------- */
+/* ===================== TOAST ===================== */
 let toastTimer;
 function toast(msg) {
   const t = $("toast");
@@ -224,27 +351,65 @@ function toast(msg) {
   toastTimer = setTimeout(() => t.classList.remove("show"), 2200);
 }
 
-/* ---------- events ---------- */
+/* ===================== INIT ===================== */
 function init() {
   buildChips();
+  initAccordions();
 
+  // Tabs
+  document.querySelectorAll(".tab-btn").forEach((b) =>
+    b.addEventListener("click", () => switchTab(b.dataset.tab))
+  );
+
+  // Estimate inputs
   $("estimator").addEventListener("input", (e) => {
     if (e.target.id === "contingency") updateContingencyLabel();
     recalc();
   });
 
   $("resetBtn").addEventListener("click", () => {
-    try { localStorage.removeItem(STORAGE_KEY); } catch (e) {}
+    if (!confirm("Reset estimate and equipment list?")) return;
+    try { localStorage.removeItem(STORAGE_KEY); localStorage.removeItem(EQUIP_KEY); } catch (e) {}
     location.reload();
   });
 
+  // Equipment
+  $("equipForm").addEventListener("submit", (e) => {
+    e.preventDefault();
+    const name = $("eqName").value.trim();
+    if (!name) return;
+    equipment.push({
+      name,
+      category: $("eqCategory").value,
+      qty: Math.max(1, parseInt($("eqQty").value, 10) || 1),
+    });
+    saveEquipment();
+    renderEquipment();
+    renderEquipSummary();
+    $("eqName").value = "";
+    $("eqQty").value = "1";
+    $("eqName").focus();
+    toast("Added");
+  });
+
+  // PDF
+  $("pdfInput").addEventListener("change", (e) => {
+    if (e.target.files && e.target.files[0]) loadPdf(e.target.files[0]);
+  });
+  $("zoomIn").addEventListener("click", () => setZoom(0.25));
+  $("zoomOut").addEventListener("click", () => setZoom(-0.25));
+
+  // Orientation hint
+  window.matchMedia("(orientation: portrait)").addEventListener("change", updateTiltHint);
+  window.addEventListener("resize", () => { if (pdfDoc) updateTiltHint(); });
+
+  // Summary actions
   $("copyBtn").addEventListener("click", async () => {
     const text = summaryText();
     try {
       await navigator.clipboard.writeText(text);
       toast("Summary copied");
     } catch (e) {
-      // Fallback for browsers without clipboard API
       const ta = document.createElement("textarea");
       ta.value = text;
       document.body.appendChild(ta);
@@ -254,10 +419,11 @@ function init() {
       ta.remove();
     }
   });
-
   $("printBtn").addEventListener("click", () => window.print());
 
   loadState();
+  loadEquipment();
+  renderEquipment();
   recalc();
 
   if ("serviceWorker" in navigator) {

@@ -14,6 +14,8 @@ const ASSETS = [
   "manifest.json",
   "icon.svg",
   "sw.js",
+  "pdf.min.js",
+  "pdf.worker.min.js",
 ];
 
 await rm(out, { recursive: true, force: true });
