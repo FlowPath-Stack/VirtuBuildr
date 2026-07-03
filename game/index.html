@@ -1,0 +1,1552 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>CROAKFALL — Pond Wars (Prototype)</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🐸</text></svg>">
+<style>
+  html, body { margin: 0; padding: 0; overflow: hidden; height: 100%; background: #0a1f14; }
+  canvas { display: block; touch-action: none; }
+  #hud {
+    position: fixed; inset: 0; pointer-events: none;
+    font-family: "Trebuchet MS", Verdana, sans-serif; color: #eafff2;
+    text-shadow: 0 1px 3px rgba(0,0,0,.6);
+    background: radial-gradient(ellipse at center, transparent 58%, rgba(8,14,26,.38) 100%);
+  }
+  #title {
+    position: absolute; top: 14px; left: 18px; font-size: 22px; font-weight: 800;
+    letter-spacing: 2px; color: #b8ff7a;
+  }
+  #title small { display: block; font-size: 11px; letter-spacing: 4px; color: #eafff2; opacity: .8; }
+  #score {
+    position: absolute; top: 16px; right: 18px; text-align: right; font-size: 15px;
+  }
+  #score b { color: #ffd857; font-size: 22px; }
+  #status {
+    position: absolute; top: 72px; right: 18px; font-size: 11px; letter-spacing: 1px;
+    padding: 3px 10px; border-radius: 10px; background: rgba(0,0,0,.35);
+  }
+  #status.online { color: #7dffb0; }
+  #status.offline { color: #ffb37d; }
+  #help {
+    position: absolute; bottom: 14px; left: 50%; transform: translateX(-50%);
+    font-size: 12px; opacity: .85; background: rgba(0,0,0,.35);
+    padding: 6px 14px; border-radius: 12px; white-space: nowrap;
+  }
+  #toast {
+    position: absolute; top: 30%; left: 50%; transform: translateX(-50%);
+    font-size: 26px; font-weight: 800; color: #ffd857; opacity: 0;
+    transition: opacity .3s; text-align: center; white-space: nowrap;
+  }
+  #quest {
+    position: absolute; top: 96px; left: 18px; max-width: 260px;
+    background: rgba(8,20,14,.55); border: 1px solid rgba(184,255,122,.35);
+    border-radius: 10px; padding: 10px 14px; font-size: 13px; line-height: 1.45;
+  }
+  #quest h3 { margin: 0 0 4px; font-size: 12px; letter-spacing: 2px; color: #b8ff7a; }
+  #quest .obj { color: #ffd857; }
+  #prompt {
+    position: absolute; bottom: 58px; left: 50%; transform: translateX(-50%);
+    font-size: 14px; font-weight: 700; color: #ffd857;
+    background: rgba(0,0,0,.45); padding: 5px 14px; border-radius: 10px; display: none;
+  }
+  #dialog {
+    position: absolute; bottom: 90px; left: 50%; transform: translateX(-50%);
+    width: min(520px, 90vw); background: rgba(10,24,16,.92);
+    border: 2px solid #b8ff7a55; border-radius: 14px; padding: 16px 20px;
+    pointer-events: auto; display: none; font-size: 14px; line-height: 1.5;
+  }
+  #dialog h2 { margin: 0 0 6px; font-size: 15px; letter-spacing: 1px; color: #b8ff7a; }
+  #dialog .coins-line { color: #ffd857; font-size: 12px; margin-top: 2px; }
+  #dlgButtons { margin-top: 12px; display: flex; flex-wrap: wrap; gap: 8px; }
+  #dlgButtons button {
+    font: inherit; font-size: 13px; font-weight: 700; cursor: pointer;
+    color: #eafff2; background: #2e5e33; border: 1px solid #b8ff7a66;
+    border-radius: 8px; padding: 6px 14px;
+  }
+  #dlgButtons button:hover { background: #3e8e41; }
+  #dlgButtons button:disabled { opacity: .45; cursor: default; }
+  #dlgButtons button.shop-item { display: block; width: 100%; text-align: left; }
+  /* touch controls — shown only on coarse-pointer devices */
+  #touch { display: none; }
+  body.touch #touch { display: block; }
+  body.touch #help { display: none; }
+  body.touch #prompt { bottom: 170px; }
+  #stick {
+    position: fixed; left: 22px; bottom: 28px; width: 130px; height: 130px;
+    border-radius: 50%; background: rgba(255,255,255,.08);
+    border: 2px solid rgba(255,255,255,.25); pointer-events: auto; touch-action: none;
+  }
+  #knob {
+    position: absolute; left: 50%; top: 50%; width: 54px; height: 54px; margin: -27px;
+    border-radius: 50%; background: rgba(184,255,122,.45); border: 2px solid rgba(184,255,122,.8);
+  }
+  .tbtn {
+    position: fixed; border-radius: 50%; pointer-events: auto; touch-action: none;
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    font-weight: 800; color: #eafff2; background: rgba(46,94,51,.55);
+    border: 2px solid rgba(184,255,122,.5); user-select: none; -webkit-user-select: none;
+  }
+  .tbtn:active { background: rgba(62,142,65,.8); }
+  .tbtn span { font-size: 9px; letter-spacing: 1px; }
+  #btnTongue { right: 24px; bottom: 30px; width: 92px; height: 92px; font-size: 30px; }
+  #btnJump { right: 126px; bottom: 66px; width: 68px; height: 68px; font-size: 22px; }
+  #btnCroak { right: 44px; bottom: 138px; width: 58px; height: 58px; font-size: 20px; }
+  body.dialog-open #touch { display: none; }
+  @media (max-width: 600px) {
+    #title { font-size: 16px; }
+    #score { font-size: 12px; }
+    #score b { font-size: 16px; }
+    #status { top: 62px; font-size: 10px; }
+    #quest { top: 84px; max-width: 210px; font-size: 11px; padding: 8px 10px; }
+    #dialog { bottom: 24px; font-size: 13px; }
+  }
+</style>
+</head>
+<body>
+<div id="hud">
+  <div id="title">CROAKFALL<small>POND WARS &mdash; PROTOTYPE</small></div>
+  <div id="score">FLIES EATEN <b id="flies">0</b> &nbsp; 🪙 <b id="coins">0</b><br><span id="pop">1 frog in the pond</span></div>
+  <div id="status" class="offline">OFFLINE &middot; BOT FROGS</div>
+  <div id="quest"></div>
+  <div id="help">WASD hop &nbsp;&bull;&nbsp; SPACE big jump &nbsp;&bull;&nbsp; CLICK tongue-snap a fly &nbsp;&bull;&nbsp; C croak &nbsp;&bull;&nbsp; E talk</div>
+  <div id="prompt"></div>
+  <div id="dialog"><h2 id="dlgName"></h2><div id="dlgText"></div><div class="coins-line" id="dlgCoins"></div><div id="dlgButtons"></div></div>
+  <div id="touch">
+    <div id="stick"><div id="knob"></div></div>
+    <div class="tbtn" id="btnJump">⬆<span>JUMP</span></div>
+    <div class="tbtn" id="btnTongue">👅<span>SNAP</span></div>
+    <div class="tbtn" id="btnCroak">🐸<span>CROAK</span></div>
+  </div>
+  <div id="toast"></div>
+</div>
+<script type="module">
+import * as THREE from './vendor/three.module.js';
+
+// ---------------------------------------------------------------- constants
+const POND_RADIUS = 55;
+const WATER_Y = 0;
+const GRAVITY = -22;
+const HOP_SPEED = 7.5;
+const HOP_UP = 5.5;
+const BIG_HOP_SPEED = 11;
+const BIG_HOP_UP = 9;
+const TONGUE_RANGE = 9;
+const NET_RATE_MS = 100;
+
+const FROG_NAMES = ['Sir Ribbitsworth', 'Padwina', 'Hopscotch', 'Bogart', 'Lily Vander-Pond',
+  'Croakus Maximus', 'Jumpelstiltskin', 'Tad Pole', 'Warty Harry', 'Peeper'];
+const FROG_COLORS = [0x4caf50, 0x7cb342, 0x26a69a, 0x9ccc65, 0x66bb6a, 0x00897b, 0xaed581, 0x43a047];
+
+const isTouch = matchMedia('(pointer: coarse)').matches || 'ontouchstart' in window;
+const params = new URLSearchParams(location.search);
+const myName = params.get('name') || FROG_NAMES[Math.floor(Math.random() * FROG_NAMES.length)];
+const serverUrl = params.get('server') ||
+  (location.protocol === 'https:' ? null : 'ws://' + (location.hostname || 'localhost') + ':8080');
+
+// ---------------------------------------------------------------- renderer
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setSize(innerWidth, innerHeight);
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.1;
+document.body.appendChild(renderer.domElement);
+
+const scene = new THREE.Scene();
+scene.fog = new THREE.Fog(0xf0bd88, 70, 175);
+
+// golden-hour gradient sky dome with a sun glow baked into the shader
+const sky = new THREE.Mesh(
+  new THREE.SphereGeometry(220, 32, 16),
+  new THREE.ShaderMaterial({
+    side: THREE.BackSide,
+    depthWrite: false,
+    uniforms: { uSunDir: { value: new THREE.Vector3(0.55, 0.28, -0.79).normalize() } },
+    vertexShader: `
+      varying vec3 vDir;
+      void main() {
+        vDir = normalize(position);
+        gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+      }`,
+    fragmentShader: `
+      uniform vec3 uSunDir;
+      varying vec3 vDir;
+      void main() {
+        float h = clamp(vDir.y, 0.0, 1.0);
+        vec3 zenith = vec3(0.16, 0.24, 0.48);
+        vec3 mid = vec3(0.55, 0.62, 0.85);
+        vec3 horizon = vec3(1.0, 0.72, 0.45);
+        vec3 col = mix(horizon, mid, smoothstep(0.0, 0.25, h));
+        col = mix(col, zenith, smoothstep(0.25, 0.85, h));
+        float sun = max(dot(vDir, uSunDir), 0.0);
+        col += vec3(1.0, 0.75, 0.4) * (pow(sun, 350.0) * 1.2 + pow(sun, 12.0) * 0.35);
+        gl_FragColor = vec4(col, 1.0);
+      }`,
+  })
+);
+scene.add(sky);
+
+// drifting cloud billboards
+function makeCloudTexture() {
+  const cv = document.createElement('canvas');
+  cv.width = 256; cv.height = 128;
+  const ctx = cv.getContext('2d');
+  for (let i = 0; i < 14; i++) {
+    const x = 40 + Math.random() * 176, y = 45 + Math.random() * 40, r = 18 + Math.random() * 26;
+    const grad = ctx.createRadialGradient(x, y, 0, x, y, r);
+    grad.addColorStop(0, 'rgba(255,240,225,0.55)');
+    grad.addColorStop(1, 'rgba(255,240,225,0)');
+    ctx.fillStyle = grad;
+    ctx.fillRect(0, 0, 256, 128);
+  }
+  return new THREE.CanvasTexture(cv);
+}
+const clouds = [];
+const cloudTex = makeCloudTexture();
+for (let i = 0; i < 9; i++) {
+  const cloud = new THREE.Sprite(new THREE.SpriteMaterial({ map: cloudTex, transparent: true, opacity: 0.8, depthWrite: false }));
+  const a = Math.random() * Math.PI * 2;
+  const r = 120 + Math.random() * 70;
+  cloud.position.set(Math.cos(a) * r, 35 + Math.random() * 35, Math.sin(a) * r);
+  cloud.scale.set(45 + Math.random() * 35, 16 + Math.random() * 10, 1);
+  cloud.userData.angle = a;
+  cloud.userData.radius = r;
+  scene.add(cloud);
+  clouds.push(cloud);
+}
+
+const camera = new THREE.PerspectiveCamera(55, innerWidth / innerHeight, 0.1, 300);
+
+const hemi = new THREE.HemisphereLight(0x9db4e6, 0x3d4a2a, 0.75);
+scene.add(hemi);
+const fill = new THREE.DirectionalLight(0x7a8fd4, 0.35); // cool bounce from the sky opposite the sun
+fill.position.set(-40, 25, 45);
+scene.add(fill);
+const sun = new THREE.DirectionalLight(0xffca85, 2.2);
+sun.position.set(44, 22, -63);
+sun.castShadow = true;
+sun.shadow.mapSize.set(2048, 2048);
+sun.shadow.camera.left = -70; sun.shadow.camera.right = 70;
+sun.shadow.camera.top = 70; sun.shadow.camera.bottom = -70;
+scene.add(sun);
+
+// ---------------------------------------------------------------- pond world
+// animated shader water: gentle swell, depth gradient, sun sparkle
+const waterUniforms = { uTime: { value: 0 } };
+const water = new THREE.Mesh(
+  new THREE.CircleGeometry(POND_RADIUS, 96),
+  new THREE.ShaderMaterial({
+    transparent: true,
+    uniforms: waterUniforms,
+    vertexShader: `
+      uniform float uTime;
+      varying vec2 vXY;
+      varying float vWave;
+      void main() {
+        vec3 p = position;
+        float w = sin(p.x * 0.35 + uTime * 1.3) * cos(p.y * 0.3 + uTime * 0.9)
+                + sin((p.x + p.y) * 0.14 - uTime * 0.6);
+        p.z += w * 0.09; // local z is world up (plane is rotated flat)
+        vXY = p.xy;
+        vWave = w;
+        gl_Position = projectionMatrix * modelViewMatrix * vec4(p, 1.0);
+      }`,
+    fragmentShader: `
+      uniform float uTime;
+      varying vec2 vXY;
+      varying float vWave;
+      void main() {
+        float d = length(vXY);
+        vec3 deep = vec3(0.08, 0.22, 0.33);
+        vec3 shallow = vec3(0.25, 0.5, 0.49);
+        vec3 col = mix(deep, shallow, smoothstep(18.0, ${POND_RADIUS}.0, d));
+        // slow caustic-ish bands
+        float band = sin(vXY.x * 0.7 + sin(vXY.y * 0.5 + uTime * 0.8) * 2.2 + uTime * 1.1) * 0.5 + 0.5;
+        col += band * 0.035;
+        // golden sun sparkle riding the swell
+        float sp = sin(vXY.x * 2.8 + uTime * 2.1) * sin(vXY.y * 3.1 - uTime * 1.6) * (0.6 + vWave * 0.4);
+        col += vec3(1.0, 0.72, 0.4) * pow(max(sp, 0.0), 9.0) * 0.5;
+        gl_FragColor = vec4(col, 0.94);
+      }`,
+  })
+);
+water.rotation.x = -Math.PI / 2;
+water.position.y = WATER_Y;
+scene.add(water);
+
+// expanding ripple rings where frogs splash down
+const ripples = [];
+const rippleGeo = new THREE.RingGeometry(0.55, 0.68, 32);
+function spawnRipple(x, z, size = 1) {
+  const ring = new THREE.Mesh(rippleGeo, new THREE.MeshBasicMaterial({
+    color: 0xd8f2ec, transparent: true, opacity: 0.55, depthWrite: false,
+  }));
+  ring.rotation.x = -Math.PI / 2;
+  ring.position.set(x, WATER_Y + 0.03, z);
+  ring.userData = { t: 0, size };
+  scene.add(ring);
+  ripples.push(ring);
+}
+function updateRipples(dt) {
+  for (let i = ripples.length - 1; i >= 0; i--) {
+    const ring = ripples[i];
+    ring.userData.t += dt;
+    const t = ring.userData.t;
+    const s = (1 + t * 4) * ring.userData.size;
+    ring.scale.set(s, s, 1);
+    ring.material.opacity = 0.55 * Math.max(0, 1 - t);
+    if (t >= 1) { scene.remove(ring); ring.material.dispose(); ripples.splice(i, 1); }
+  }
+}
+
+const shore = new THREE.Mesh(
+  new THREE.RingGeometry(POND_RADIUS - 0.5, POND_RADIUS + 60, 64),
+  new THREE.MeshStandardMaterial({ color: 0x5d8a3c, roughness: 1 })
+);
+shore.rotation.x = -Math.PI / 2;
+shore.position.y = WATER_Y + 0.02;
+shore.receiveShadow = true;
+scene.add(shore);
+
+// lily pads — these are the platforms frogs stand on
+const pads = [];
+const padGeo = new THREE.CylinderGeometry(1, 1, 0.12, 24, 1, false, 0.35, Math.PI * 2 - 0.35);
+const padMat = new THREE.MeshStandardMaterial({ color: 0x3e8e41, roughness: 0.8 });
+for (let i = 0; i < 34; i++) {
+  const r = 4 + Math.random() * (POND_RADIUS - 8);
+  const a = Math.random() * Math.PI * 2;
+  const scale = 1.4 + Math.random() * 1.8;
+  const pad = new THREE.Mesh(padGeo, padMat.clone());
+  pad.material.color.offsetHSL((Math.random() - 0.5) * 0.03, 0, (Math.random() - 0.5) * 0.07);
+  pad.scale.set(scale, 1, scale);
+  pad.position.set(Math.cos(a) * r, WATER_Y + 0.1, Math.sin(a) * r);
+  pad.rotation.y = Math.random() * Math.PI * 2;
+  pad.castShadow = pad.receiveShadow = true;
+  pad.userData = { radius: scale, bobPhase: Math.random() * Math.PI * 2 };
+  scene.add(pad);
+  pads.push(pad);
+}
+
+// lotus flowers on a few pads
+const petalMat = new THREE.MeshStandardMaterial({ color: 0xffc4d6, roughness: 0.6 });
+const pistilMat = new THREE.MeshStandardMaterial({ color: 0xffd857, roughness: 0.5, emissive: 0x554400 });
+for (let i = 0; i < 7; i++) {
+  const pad = pads[Math.floor(Math.random() * pads.length)];
+  const flower = new THREE.Group();
+  for (let p = 0; p < 6; p++) {
+    const petal = new THREE.Mesh(new THREE.ConeGeometry(0.14, 0.5, 6), petalMat);
+    const a = (p / 6) * Math.PI * 2;
+    petal.position.set(Math.cos(a) * 0.18, 0.16, Math.sin(a) * 0.18);
+    petal.rotation.set(Math.cos(a) * 0.9, 0, -Math.sin(a) * 0.9);
+    flower.add(petal);
+  }
+  const pistil = new THREE.Mesh(new THREE.SphereGeometry(0.12, 10, 8), pistilMat);
+  pistil.position.y = 0.18;
+  flower.add(pistil);
+  // world-space (pads are non-uniformly scaled, so parenting would distort the petals)
+  flower.position.set(
+    pad.position.x + (Math.random() - 0.5) * pad.userData.radius * 0.7,
+    WATER_Y + 0.22,
+    pad.position.z + (Math.random() - 0.5) * pad.userData.radius * 0.7
+  );
+  flower.traverse(o => { if (o.isMesh) o.castShadow = true; });
+  scene.add(flower);
+}
+
+// cattails around the shore — grouped at the base so they sway from the roots
+const cattails = [];
+const stalkMat = new THREE.MeshStandardMaterial({ color: 0x6b8f3a, roughness: 1 });
+const headMat = new THREE.MeshStandardMaterial({ color: 0x6d4c2f, roughness: 1 });
+for (let i = 0; i < 60; i++) {
+  const a = Math.random() * Math.PI * 2;
+  const r = POND_RADIUS + 1 + Math.random() * 6;
+  const h = 2 + Math.random() * 2.5;
+  const tail = new THREE.Group();
+  tail.position.set(Math.cos(a) * r, 0, Math.sin(a) * r);
+  const stalk = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.09, h, 6), stalkMat);
+  stalk.position.y = h / 2;
+  const head = new THREE.Mesh(new THREE.CapsuleGeometry(0.16, 0.7, 4, 8), headMat);
+  head.position.y = h + 0.2;
+  stalk.castShadow = head.castShadow = true;
+  tail.add(stalk, head);
+  tail.userData = { phase: Math.random() * Math.PI * 2, amp: 0.05 + Math.random() * 0.06 };
+  scene.add(tail);
+  cattails.push(tail);
+}
+
+// grass tufts on the shore: crossed alpha-textured planes
+function makeGrassTexture() {
+  const cv = document.createElement('canvas');
+  cv.width = 128; cv.height = 128;
+  const ctx = cv.getContext('2d');
+  for (let b = 0; b < 9; b++) {
+    const x = 12 + b * 13 + Math.random() * 6;
+    const lean = (Math.random() - 0.5) * 30;
+    const grad = ctx.createLinearGradient(0, 128, 0, 30);
+    grad.addColorStop(0, '#3c5a22');
+    grad.addColorStop(1, '#7a9c40');
+    ctx.strokeStyle = grad;
+    ctx.lineWidth = 4;
+    ctx.beginPath();
+    ctx.moveTo(x, 128);
+    ctx.quadraticCurveTo(x + lean * 0.4, 70, x + lean, 20 + Math.random() * 25);
+    ctx.stroke();
+  }
+  return new THREE.CanvasTexture(cv);
+}
+const grassMat = new THREE.MeshStandardMaterial({
+  map: makeGrassTexture(), transparent: true, alphaTest: 0.15, side: THREE.DoubleSide, roughness: 1,
+});
+const grassGeo = new THREE.PlaneGeometry(1.6, 1.6);
+for (let i = 0; i < 90; i++) {
+  const a = Math.random() * Math.PI * 2;
+  const r = POND_RADIUS + 0.5 + Math.random() * 14;
+  const tuft = new THREE.Group();
+  for (let p = 0; p < 2; p++) {
+    const blade = new THREE.Mesh(grassGeo, grassMat);
+    blade.rotation.y = p * Math.PI / 2 + Math.random();
+    blade.position.y = 0.75;
+    tuft.add(blade);
+  }
+  tuft.position.set(Math.cos(a) * r, 0, Math.sin(a) * r);
+  const s = 0.7 + Math.random() * 0.8;
+  tuft.scale.set(s, s, s);
+  scene.add(tuft);
+}
+
+// a handful of trees on the far shore
+const trunkMat = new THREE.MeshStandardMaterial({ color: 0x5c4430, roughness: 1 });
+const leafMats = [0x37622e, 0x486e2f, 0x2e5530].map(c => new THREE.MeshStandardMaterial({ color: c, roughness: 0.9 }));
+for (let i = 0; i < 8; i++) {
+  const a = (i / 8) * Math.PI * 2 + Math.random() * 0.5;
+  const r = POND_RADIUS + 18 + Math.random() * 22;
+  const h = 5 + Math.random() * 4;
+  const tree = new THREE.Group();
+  const trunk = new THREE.Mesh(new THREE.CylinderGeometry(0.35, 0.55, h, 8), trunkMat);
+  trunk.position.y = h / 2;
+  tree.add(trunk);
+  for (let b = 0; b < 4; b++) {
+    const s = 1.8 + Math.random() * 1.6;
+    const blob = new THREE.Mesh(new THREE.SphereGeometry(s, 12, 10), leafMats[b % leafMats.length]);
+    blob.position.set((Math.random() - 0.5) * 2.6, h - 0.5 + Math.random() * 2.2, (Math.random() - 0.5) * 2.6);
+    tree.add(blob);
+  }
+  tree.position.set(Math.cos(a) * r, 0, Math.sin(a) * r);
+  tree.traverse(o => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; } });
+  scene.add(tree);
+}
+
+// fireflies drifting near the reeds at dusk
+const FIREFLY_COUNT = 70;
+const fireflyBase = [];
+const fireflyPos = new Float32Array(FIREFLY_COUNT * 3);
+for (let i = 0; i < FIREFLY_COUNT; i++) {
+  const a = Math.random() * Math.PI * 2;
+  const r = POND_RADIUS - 6 + Math.random() * 14;
+  fireflyBase.push({ x: Math.cos(a) * r, y: 0.6 + Math.random() * 2.2, z: Math.sin(a) * r, phase: Math.random() * Math.PI * 2 });
+}
+const fireflyGeo = new THREE.BufferGeometry();
+fireflyGeo.setAttribute('position', new THREE.BufferAttribute(fireflyPos, 3));
+const fireflies = new THREE.Points(fireflyGeo, new THREE.PointsMaterial({
+  color: 0xffe28a, size: 0.22, transparent: true, opacity: 0.9,
+  blending: THREE.AdditiveBlending, depthWrite: false, sizeAttenuation: true,
+}));
+scene.add(fireflies);
+function updateFireflies(t) {
+  for (let i = 0; i < FIREFLY_COUNT; i++) {
+    const b = fireflyBase[i];
+    fireflyPos[i * 3] = b.x + Math.sin(t * 0.7 + b.phase) * 1.4;
+    fireflyPos[i * 3 + 1] = b.y + Math.sin(t * 1.3 + b.phase * 2) * 0.5;
+    fireflyPos[i * 3 + 2] = b.z + Math.cos(t * 0.5 + b.phase) * 1.4;
+  }
+  fireflyGeo.attributes.position.needsUpdate = true;
+  fireflies.material.opacity = 0.55 + Math.sin(t * 2.4) * 0.35;
+}
+const rockMat = new THREE.MeshStandardMaterial({ color: 0x8d8d84, roughness: 1 });
+for (let i = 0; i < 18; i++) {
+  const a = Math.random() * Math.PI * 2;
+  const r = POND_RADIUS + 2 + Math.random() * 15;
+  const s = 0.6 + Math.random() * 1.6;
+  const rock = new THREE.Mesh(new THREE.DodecahedronGeometry(s, 0), rockMat);
+  rock.position.set(Math.cos(a) * r, s * 0.4, Math.sin(a) * r);
+  rock.rotation.set(Math.random(), Math.random(), Math.random());
+  rock.castShadow = rock.receiveShadow = true;
+  scene.add(rock);
+}
+
+// ---------------------------------------------------------------- frog factory
+function makeNameSprite(text, color) {
+  const cv = document.createElement('canvas');
+  cv.width = 512; cv.height = 96;
+  const ctx = cv.getContext('2d');
+  ctx.font = 'bold 52px Trebuchet MS, sans-serif';
+  ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  ctx.fillStyle = 'rgba(0,0,0,0.45)';
+  ctx.strokeStyle = 'rgba(0,0,0,0.45)'; ctx.lineWidth = 10; ctx.lineJoin = 'round';
+  ctx.strokeText(text, 256, 48);
+  ctx.fillStyle = color;
+  ctx.fillText(text, 256, 48);
+  const tex = new THREE.CanvasTexture(cv);
+  const sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, depthTest: false }));
+  sprite.scale.set(4.4, 0.82, 1);
+  sprite.position.y = 2.1;
+  return sprite;
+}
+
+function makeFrog(color, name, nameColor = '#ffffff') {
+  const g = new THREE.Group();
+  const mat = new THREE.MeshStandardMaterial({ color, roughness: 0.6 });
+  const bellyMat = new THREE.MeshStandardMaterial({ color: 0xf5f0d0, roughness: 0.7 });
+
+  const body = new THREE.Mesh(new THREE.SphereGeometry(0.65, 20, 16), mat);
+  body.scale.set(1, 0.78, 1.25);
+  body.position.y = 0.52;
+  const belly = new THREE.Mesh(new THREE.SphereGeometry(0.52, 16, 12), bellyMat);
+  belly.scale.set(1, 0.7, 1.15);
+  belly.position.set(0, 0.42, 0.08);
+
+  const head = new THREE.Mesh(new THREE.SphereGeometry(0.42, 20, 16), mat);
+  head.scale.set(1.05, 0.75, 0.9);
+  head.position.set(0, 0.78, 0.62);
+
+  // darker spots along the back
+  const spotMat = new THREE.MeshStandardMaterial({
+    color: new THREE.Color(color).multiplyScalar(0.62), roughness: 0.7,
+  });
+  for (let i = 0; i < 6; i++) {
+    const spot = new THREE.Mesh(new THREE.SphereGeometry(0.07 + Math.random() * 0.07, 8, 6), spotMat);
+    spot.scale.y = 0.35;
+    const a = (Math.random() - 0.5) * 1.6;
+    spot.position.set(Math.sin(a) * 0.5, 0.52 + Math.cos(a) * 0.45, -0.35 + Math.random() * 0.9);
+    g.add(spot);
+  }
+
+  // throat sac — inflates when croaking
+  const sac = new THREE.Mesh(new THREE.SphereGeometry(0.26, 14, 12), bellyMat);
+  sac.position.set(0, 0.55, 0.78);
+  sac.scale.setScalar(0.01);
+  g.add(sac);
+
+  const eyes = [];
+  const eyeWhiteMat = new THREE.MeshStandardMaterial({ color: 0xfffbe8, roughness: 0.3 });
+  const pupilMat = new THREE.MeshStandardMaterial({ color: 0x14140f, roughness: 0.2 });
+  for (const side of [-1, 1]) {
+    const eye = new THREE.Mesh(new THREE.SphereGeometry(0.18, 14, 12), eyeWhiteMat);
+    eye.position.set(side * 0.28, 1.1, 0.72);
+    const pupil = new THREE.Mesh(new THREE.SphereGeometry(0.09, 10, 8), pupilMat);
+    pupil.position.set(side * 0.28, 1.12, 0.86);
+    eyes.push(eye, pupil);
+    g.add(eye, pupil);
+
+    // back legs — big folded haunches
+    const haunch = new THREE.Mesh(new THREE.SphereGeometry(0.34, 14, 12), mat);
+    haunch.scale.set(0.8, 0.9, 1.2);
+    haunch.position.set(side * 0.55, 0.36, -0.42);
+    // front legs
+    const arm = new THREE.Mesh(new THREE.CapsuleGeometry(0.09, 0.35, 4, 8), mat);
+    arm.position.set(side * 0.42, 0.28, 0.5);
+    arm.rotation.x = 0.4;
+    // feet
+    const foot = new THREE.Mesh(new THREE.SphereGeometry(0.14, 10, 8), mat);
+    foot.scale.set(1.4, 0.4, 1.8);
+    foot.position.set(side * 0.6, 0.06, -0.1);
+    g.add(haunch, arm, foot);
+  }
+
+  g.add(body, belly, head);
+  g.traverse(o => { if (o.isMesh) o.castShadow = true; });
+
+  const nameSprite = makeNameSprite(name, nameColor);
+  g.add(nameSprite);
+
+  // tongue: a stretched cylinder we scale toward a target when snapping
+  const tongue = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.05, 0.07, 1, 8),
+    new THREE.MeshStandardMaterial({ color: 0xff6a8a, roughness: 0.4 })
+  );
+  tongue.visible = false;
+  g.add(tongue);
+
+  return {
+    group: g, body, tongue, tongueT: 0, tongueTarget: new THREE.Vector3(),
+    eyes, sac, croakT: 0, blinkT: 1.5 + Math.random() * 3, blinking: 0,
+  };
+}
+
+// blinking + croak sac animation, shared by every frog on screen
+function updateFrogAmbient(frog, dt) {
+  frog.blinkT -= dt;
+  if (frog.blinkT <= 0) { frog.blinking = 0.16; frog.blinkT = 1.8 + Math.random() * 3.5; }
+  if (frog.blinking > 0) {
+    frog.blinking -= dt;
+    const squeeze = Math.sin(Math.min(1, 1 - frog.blinking / 0.16) * Math.PI);
+    for (const eye of frog.eyes) eye.scale.y = 1 - squeeze * 0.85;
+  } else {
+    for (const eye of frog.eyes) eye.scale.y = 1;
+  }
+  if (frog.croakT > 0) {
+    frog.croakT = Math.max(0, frog.croakT - dt * 2.2);
+    frog.sac.scale.setScalar(0.01 + Math.sin(frog.croakT * Math.PI) * 1.1);
+  } else {
+    frog.sac.scale.setScalar(0.01);
+  }
+}
+
+// ---------------------------------------------------------------- flies
+const flies = [];
+const flyGeo = new THREE.SphereGeometry(0.12, 8, 6);
+const flyMat = new THREE.MeshStandardMaterial({ color: 0x222222, roughness: 0.5 });
+const wingMat = new THREE.MeshStandardMaterial({ color: 0xffffff, transparent: true, opacity: 0.55 });
+function spawnFly() {
+  const fly = new THREE.Group();
+  fly.add(new THREE.Mesh(flyGeo, flyMat));
+  const wings = [];
+  for (const side of [-1, 1]) {
+    const wing = new THREE.Mesh(new THREE.PlaneGeometry(0.2, 0.1), wingMat);
+    wing.position.set(side * 0.12, 0.08, 0);
+    wing.userData.side = side;
+    wings.push(wing);
+    fly.add(wing);
+  }
+  const r = 3 + Math.random() * (POND_RADIUS - 6);
+  const a = Math.random() * Math.PI * 2;
+  fly.position.set(Math.cos(a) * r, 1 + Math.random() * 1.5, Math.sin(a) * r);
+  fly.userData = {
+    phase: Math.random() * Math.PI * 2,
+    center: fly.position.clone(),
+    speed: 0.6 + Math.random() * 0.8,
+    wings,
+  };
+  scene.add(fly);
+  flies.push(fly);
+}
+for (let i = 0; i < 14; i++) spawnFly();
+
+function updateFlies(t, dt) {
+  for (const fly of flies) {
+    const u = fly.userData;
+    u.center.x += Math.sin(t * u.speed + u.phase) * dt * 2;
+    u.center.z += Math.cos(t * u.speed * 0.7 + u.phase * 2) * dt * 2;
+    const d = Math.hypot(u.center.x, u.center.z);
+    if (d > POND_RADIUS - 2) { u.center.x *= 0.99; u.center.z *= 0.99; }
+    fly.position.set(
+      u.center.x + Math.sin(t * 7 + u.phase) * 0.3,
+      1.2 + Math.sin(t * 3 + u.phase) * 0.6,
+      u.center.z + Math.cos(t * 6 + u.phase) * 0.3
+    );
+    const flap = Math.sin(t * 42 + u.phase) * 0.7;
+    for (const wing of u.wings) wing.rotation.z = flap * wing.userData.side;
+  }
+}
+
+// ---------------------------------------------------------------- audio (starts on first gesture)
+let audioCtx = null;
+function ensureAudio() { if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)(); }
+function croakSound() {
+  if (!audioCtx) return;
+  const o = audioCtx.createOscillator(), gain = audioCtx.createGain();
+  o.type = 'sawtooth';
+  o.frequency.setValueAtTime(140, audioCtx.currentTime);
+  o.frequency.exponentialRampToValueAtTime(60, audioCtx.currentTime + 0.25);
+  gain.gain.setValueAtTime(0.15, audioCtx.currentTime);
+  gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.3);
+  o.connect(gain).connect(audioCtx.destination);
+  o.start(); o.stop(audioCtx.currentTime + 0.3);
+}
+function slurpSound() {
+  if (!audioCtx) return;
+  const o = audioCtx.createOscillator(), gain = audioCtx.createGain();
+  o.type = 'sine';
+  o.frequency.setValueAtTime(300, audioCtx.currentTime);
+  o.frequency.exponentialRampToValueAtTime(900, audioCtx.currentTime + 0.12);
+  gain.gain.setValueAtTime(0.12, audioCtx.currentTime);
+  gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.15);
+  o.connect(gain).connect(audioCtx.destination);
+  o.start(); o.stop(audioCtx.currentTime + 0.15);
+}
+
+// ---------------------------------------------------------------- player
+const myColor = FROG_COLORS[Math.floor(Math.random() * FROG_COLORS.length)];
+const me = makeFrog(myColor, myName, '#b8ff7a');
+me.group.position.set(0, WATER_Y, 0);
+scene.add(me.group);
+
+const player = {
+  pos: me.group.position,
+  vel: new THREE.Vector3(),
+  heading: 0,
+  grounded: true,
+  hopCooldown: 0,
+  score: 0,
+};
+
+function groundHeightAt(x, z) {
+  for (const isle of islets) {
+    const dx = x - isle.x, dz = z - isle.z;
+    if (dx * dx + dz * dz < isle.r * isle.r) return WATER_Y + isle.h;
+  }
+  for (const pad of pads) {
+    const dx = x - pad.position.x, dz = z - pad.position.z;
+    if (dx * dx + dz * dz < pad.userData.radius * pad.userData.radius) return pad.position.y + 0.06;
+  }
+  if (Math.hypot(x, z) > POND_RADIUS) return WATER_Y + 0.05; // shore
+  return WATER_Y - 0.18; // swimming, slightly sunk
+}
+
+const keys = {};
+addEventListener('keydown', e => {
+  keys[e.code] = true;
+  ensureAudio();
+  if (e.code === 'KeyC') doCroak(me, true);
+  if (e.code === 'KeyE') tryInteract();
+  if (e.code === 'Escape') closeDialog();
+  if (e.code === 'Space') e.preventDefault();
+});
+addEventListener('keyup', e => keys[e.code] = false);
+
+function hop(entity, dir, big, mult = 1) {
+  if (groundHeightAt(entity.pos.x, entity.pos.z) < WATER_Y) spawnRipple(entity.pos.x, entity.pos.z, 0.8);
+  entity.vel.x = Math.sin(dir) * (big ? BIG_HOP_SPEED : HOP_SPEED) * mult;
+  entity.vel.z = Math.cos(dir) * (big ? BIG_HOP_SPEED : HOP_SPEED) * mult;
+  entity.vel.y = (big ? BIG_HOP_UP : HOP_UP) * mult;
+  entity.grounded = false;
+}
+
+function stepPhysics(entity, group, dt) {
+  if (!entity.grounded) {
+    entity.vel.y += GRAVITY * dt;
+    entity.pos.addScaledVector(entity.vel, dt);
+    const gy = groundHeightAt(entity.pos.x, entity.pos.z);
+    if (entity.vel.y < 0 && entity.pos.y <= gy) {
+      entity.pos.y = gy;
+      entity.vel.set(0, 0, 0);
+      entity.grounded = true;
+      if (gy < WATER_Y) spawnRipple(entity.pos.x, entity.pos.z, 1.3); // splashdown
+    }
+  } else {
+    // settle onto whatever is under us (pads bob, water drifts)
+    entity.pos.y += (groundHeightAt(entity.pos.x, entity.pos.z) - entity.pos.y) * Math.min(1, dt * 10);
+  }
+  // keep everyone in the world
+  const d = Math.hypot(entity.pos.x, entity.pos.z);
+  const maxR = POND_RADIUS + 12;
+  if (d > maxR) { entity.pos.x *= maxR / d; entity.pos.z *= maxR / d; }
+  group.position.copy(entity.pos);
+  group.rotation.y = entity.heading;
+  // squash & stretch
+  const air = entity.grounded ? 0 : 1;
+  group.scale.y += ((1 + air * 0.15) - group.scale.y) * Math.min(1, dt * 12);
+}
+
+// ---------------------------------------------------------------- tongue snap
+function tryTongue(frog, entity, isMe) {
+  let best = null, bestScore = Infinity;
+  const fwd = new THREE.Vector3(Math.sin(entity.heading), 0, Math.cos(entity.heading));
+  for (const fly of flies) {
+    if (!isMe && fly.userData.golden) continue; // the Golden Fly is the hero's to catch
+    const to = fly.position.clone().sub(entity.pos);
+    const dist = to.length();
+    if (dist > (isMe ? tongueRange : TONGUE_RANGE)) continue;
+    const facing = fwd.dot(to.clone().setY(0).normalize());
+    if (isMe && facing < 0.2) continue; // player must roughly face the fly
+    if (dist < bestScore) { bestScore = dist; best = fly; }
+  }
+  if (!best) return false;
+  frog.tongueT = 1;
+  frog.tongueTarget.copy(best.position);
+  const golden = !!best.userData.golden;
+  scene.remove(best);
+  flies.splice(flies.indexOf(best), 1);
+  if (!golden) spawnFly(); // ordinary flies respawn elsewhere
+  if (isMe) {
+    player.score++;
+    document.getElementById('flies').textContent = player.score;
+    addCoins(golden ? 5 : 1);
+    slurpSound();
+    onFlyEaten(golden);
+    if (golden) toast('✨ THE GOLDEN FLY! ✨');
+    else if (player.score % 10 === 0) toast('RIBBIT LEVEL UP!');
+  }
+  return true;
+}
+
+function updateTongue(frog, dt) {
+  if (frog.tongueT <= 0) { frog.tongue.visible = false; return; }
+  frog.tongueT = Math.max(0, frog.tongueT - dt * 4);
+  const mouth = frog.group.position.clone().add(new THREE.Vector3(0, 0.75, 0));
+  const reach = Math.sin(frog.tongueT * Math.PI); // out and back
+  const tip = mouth.clone().lerp(frog.tongueTarget, reach);
+  const mid = mouth.clone().lerp(tip, 0.5);
+  const len = Math.max(0.01, mouth.distanceTo(tip));
+  frog.tongue.visible = true;
+  frog.tongue.position.copy(frog.group.worldToLocal(mid.clone()));
+  frog.tongue.scale.set(1, len, 1);
+  frog.tongue.lookAt(frog.group.worldToLocal(tip.clone()).add(frog.tongue.position));
+  frog.tongue.rotateX(Math.PI / 2);
+}
+
+addEventListener('mousedown', e => {
+  if (e.target.closest && e.target.closest('#dialog, #prompt')) return; // UI clicks aren't tongue-snaps
+  ensureAudio();
+  tryTongue(me, player, true);
+});
+
+// ---------------------------------------------------------------- croak bubbles
+function doCroak(frog, isMe) {
+  croakSound();
+  frog.croakT = 1;
+  const bubble = makeNameSprite('ribbit!', '#ffd857');
+  bubble.position.y = 2.8;
+  frog.group.add(bubble);
+  setTimeout(() => frog.group.remove(bubble), 900);
+  if (isMe && net.ws && net.ws.readyState === 1) net.ws.send(JSON.stringify({ type: 'croak' }));
+}
+
+function toast(msg) {
+  const el = document.getElementById('toast');
+  el.textContent = msg;
+  el.style.opacity = 1;
+  setTimeout(() => el.style.opacity = 0, 1400);
+}
+
+// ---------------------------------------------------------------- save data
+// localStorage is unavailable in sandboxed iframes / private browsing; fall back to in-memory
+const storage = (() => {
+  try {
+    localStorage.setItem('__cf_probe', '1');
+    localStorage.removeItem('__cf_probe');
+    return localStorage;
+  } catch {
+    const mem = new Map();
+    return { getItem: k => mem.get(k) ?? null, setItem: (k, v) => mem.set(k, String(v)) };
+  }
+})();
+const SAVE_KEY = 'croakfall_save_v1';
+const save = Object.assign(
+  { coins: 0, owned: [], hat: null, questIndex: 0, questStage: 'none', questProgress: 0, stones: [false, false, false] },
+  JSON.parse(storage.getItem(SAVE_KEY) || '{}')
+);
+function persist() { storage.setItem(SAVE_KEY, JSON.stringify(save)); }
+function addCoins(n) {
+  save.coins += n;
+  document.getElementById('coins').textContent = save.coins;
+  persist();
+}
+document.getElementById('coins').textContent = save.coins;
+
+// ---------------------------------------------------------------- hats
+function buildHat(id) {
+  const g = new THREE.Group();
+  if (id === 'lily') {
+    const pad = new THREE.Mesh(new THREE.CylinderGeometry(0.34, 0.34, 0.06, 18, 1, false, 0.3, Math.PI * 2 - 0.3),
+      new THREE.MeshStandardMaterial({ color: 0x3e8e41, roughness: 0.8 }));
+    const bud = new THREE.Mesh(new THREE.SphereGeometry(0.09, 8, 6),
+      new THREE.MeshStandardMaterial({ color: 0xffc4d6, roughness: 0.6 }));
+    bud.position.y = 0.09;
+    g.add(pad, bud);
+  } else if (id === 'top') {
+    const black = new THREE.MeshStandardMaterial({ color: 0x1c1c22, roughness: 0.4 });
+    const brim = new THREE.Mesh(new THREE.CylinderGeometry(0.32, 0.32, 0.04, 16), black);
+    const crown = new THREE.Mesh(new THREE.CylinderGeometry(0.2, 0.2, 0.38, 16), black);
+    crown.position.y = 0.2;
+    const band = new THREE.Mesh(new THREE.CylinderGeometry(0.205, 0.205, 0.07, 16),
+      new THREE.MeshStandardMaterial({ color: 0xb03040, roughness: 0.5 }));
+    band.position.y = 0.07;
+    g.add(brim, crown, band);
+  } else if (id === 'wizard') {
+    const purple = new THREE.MeshStandardMaterial({ color: 0x5e35b1, roughness: 0.6 });
+    const brim = new THREE.Mesh(new THREE.CylinderGeometry(0.36, 0.36, 0.04, 16), purple);
+    const cone = new THREE.Mesh(new THREE.ConeGeometry(0.22, 0.55, 16), purple);
+    cone.position.y = 0.28;
+    cone.rotation.y = 0.4;
+    g.add(brim, cone);
+  } else if (id === 'crown') {
+    const gold = new THREE.MeshStandardMaterial({ color: 0xffd857, roughness: 0.25, metalness: 0.7, emissive: 0x332200 });
+    const ring = new THREE.Mesh(new THREE.CylinderGeometry(0.24, 0.26, 0.14, 16), gold);
+    g.add(ring);
+    for (let i = 0; i < 5; i++) {
+      const a = (i / 5) * Math.PI * 2;
+      const spike = new THREE.Mesh(new THREE.ConeGeometry(0.06, 0.16, 6), gold);
+      spike.position.set(Math.cos(a) * 0.24, 0.14, Math.sin(a) * 0.24);
+      g.add(spike);
+    }
+  } else return null;
+  g.traverse(o => { if (o.isMesh) o.castShadow = true; });
+  g.position.set(0, 1.26, 0.5);
+  g.rotation.x = -0.15;
+  return g;
+}
+function equipHat(frog, hatId) {
+  if (frog.hatMesh) { frog.group.remove(frog.hatMesh); frog.hatMesh = null; }
+  frog.hatId = hatId || null;
+  if (hatId) {
+    frog.hatMesh = buildHat(hatId);
+    if (frog.hatMesh) frog.group.add(frog.hatMesh);
+  }
+}
+
+// ---------------------------------------------------------------- islets & NPCs
+const islets = [
+  { x: 12, z: 14, r: 3.2, h: 0.55 },   // Elder Toad's rock
+  { x: -16, z: 10, r: 3.5, h: 0.5 },   // Madame Bufo's Bazaar
+];
+const isletMat = new THREE.MeshStandardMaterial({ color: 0x9a938a, roughness: 1 });
+for (const isle of islets) {
+  const rock = new THREE.Mesh(new THREE.CylinderGeometry(isle.r, isle.r + 0.6, isle.h + 0.5, 24), isletMat);
+  rock.position.set(isle.x, WATER_Y + isle.h - (isle.h + 0.5) / 2 + 0.02, isle.z);
+  rock.castShadow = rock.receiveShadow = true;
+  scene.add(rock);
+}
+
+const elder = makeFrog(0x8d6e42, 'Elder Toad', '#ffd857');
+elder.group.scale.setScalar(1.45);
+elder.group.position.set(islets[0].x, WATER_Y + islets[0].h, islets[0].z);
+elder.group.rotation.y = Math.atan2(-islets[0].x, -islets[0].z); // face pond center
+// a wispy white beard for the old fellow
+const beardMat = new THREE.MeshStandardMaterial({ color: 0xf2ede0, roughness: 1 });
+for (let i = 0; i < 3; i++) {
+  const tuftB = new THREE.Mesh(new THREE.SphereGeometry(0.09 - i * 0.02, 8, 6), beardMat);
+  tuftB.position.set(0, 0.52 - i * 0.12, 0.86);
+  elder.group.add(tuftB);
+}
+scene.add(elder.group);
+const elderMarker = makeNameSprite('!', '#ffd857');
+elderMarker.scale.set(1.2, 0.9, 1);
+elderMarker.position.y = 2.6;
+elder.group.add(elderMarker);
+
+const vendor = makeFrog(0x26a69a, 'Madame Bufo', '#ffb37d');
+vendor.group.scale.setScalar(1.15);
+vendor.group.position.set(islets[1].x, WATER_Y + islets[1].h, islets[1].z);
+vendor.group.rotation.y = Math.atan2(-islets[1].x, -islets[1].z);
+scene.add(vendor.group);
+// market stall behind her: posts, counter, striped awning
+const stall = new THREE.Group();
+const wood = new THREE.MeshStandardMaterial({ color: 0x7a5a38, roughness: 1 });
+for (const sx of [-1.2, 1.2]) {
+  const post = new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.07, 2.2, 8), wood);
+  post.position.set(sx, 1.1, 0);
+  stall.add(post);
+}
+const counter = new THREE.Mesh(new THREE.BoxGeometry(2.7, 0.12, 0.9), wood);
+counter.position.y = 0.85;
+stall.add(counter);
+const awning = new THREE.Mesh(new THREE.BoxGeometry(2.9, 0.06, 1.3),
+  new THREE.MeshStandardMaterial({ color: 0xd85f5f, roughness: 0.8 }));
+awning.position.y = 2.25;
+awning.rotation.x = 0.12;
+stall.add(awning);
+// display hats on the counter
+for (const [i, hid] of ['top', 'wizard', 'crown'].entries()) {
+  const disp = buildHat(hid);
+  disp.position.set(-0.8 + i * 0.8, 0.98, 0);
+  disp.rotation.x = 0;
+  stall.add(disp);
+}
+stall.traverse(o => { if (o.isMesh) o.castShadow = true; });
+const stallAngle = Math.atan2(-islets[1].x, -islets[1].z);
+stall.position.set(islets[1].x - Math.sin(stallAngle) * 1.6, WATER_Y + islets[1].h, islets[1].z - Math.cos(stallAngle) * 1.6);
+stall.rotation.y = stallAngle;
+scene.add(stall);
+
+const npcFrogs = [elder, vendor];
+
+// ---------------------------------------------------------------- whispering stones
+const stones = [];
+const stoneAngles = [0.6, 2.5, 4.5];
+for (const [i, a] of stoneAngles.entries()) {
+  const stone = new THREE.Mesh(
+    new THREE.BoxGeometry(0.9, 2.6, 0.5),
+    new THREE.MeshStandardMaterial({ color: 0x5a6a70, roughness: 0.9, emissive: 0x1de9b6, emissiveIntensity: 0.12 })
+  );
+  const r = POND_RADIUS - 4;
+  stone.position.set(Math.cos(a) * r, 1.1, Math.sin(a) * r);
+  stone.rotation.y = -a;
+  stone.rotation.z = (i - 1) * 0.08;
+  stone.castShadow = true;
+  scene.add(stone);
+  stones.push(stone);
+  if (save.stones[i]) stone.material.emissiveIntensity = 0.85;
+}
+
+// ---------------------------------------------------------------- quests & story
+const QUESTS = [
+  {
+    title: 'A Hungry Start',
+    objective: n => `Eat flies (${n}/5)`,
+    target: 5,
+    reward: 10,
+    offer: 'Ah, a young leaper. Long ago this pond rang with the GREAT CROAK — a song so deep the herons dared not land. When its last verse was forgotten, the magic sank into the mud. My memory wakes on a full stomach... eat 5 flies and show me this pond still feeds its heroes.',
+    remind: 'Full bellies, full memories. Snap up those flies, young one.',
+    done: 'Ha! A tongue like your grandmother’s. Yes... the FIRST VERSE returns to me: ♪ Deep is the mud and sweet is the rain ♪',
+  },
+  {
+    title: 'The Whispering Stones',
+    objective: n => `Visit the glowing stones (${n}/3)`,
+    target: 3,
+    reward: 15,
+    offer: 'Three WHISPERING STONES stand at the water’s edge, older than any toad. Sit beside each and listen — together they hum the second verse. Visit all three and return.',
+    remind: 'The stones glow teal at the pond’s rim. Sit close. Listen with your skin, as frogs do.',
+    done: 'Yes... YES! The stones still sing! The SECOND VERSE: ♪ Still is the water that carries the song ♪',
+  },
+  {
+    title: 'The Golden Fly',
+    objective: () => 'Catch the Golden Fly',
+    target: 1,
+    reward: 30,
+    offer: 'The final verse hides inside the GOLDEN FLY — quick as sunlight on water, sweet as summer’s last evening. Catch it, and the Great Croak returns to this pond. Go, hero. Make an old toad sing.',
+    remind: 'The Golden Fly gleams somewhere over the water. Face it, get close, and SNAP.',
+    done: 'THE GREAT CROAK RETURNS! ♪ RIBBIT-OHHHM ♪ Sing, pond, SING!',
+  },
+];
+const EPILOGUE = 'The pond sings again thanks to you, hero. Rest your legs — or visit Madame Bufo’s Bazaar. A frog who saves a pond deserves a crown.';
+
+const questEl = document.getElementById('quest');
+function renderQuest() {
+  if (save.questIndex >= QUESTS.length) {
+    questEl.innerHTML = '<h3>STORY COMPLETE</h3>The Great Croak echoes once more. ✔';
+    return;
+  }
+  const q = QUESTS[save.questIndex];
+  if (save.questStage === 'none') {
+    questEl.innerHTML = '<h3>QUEST</h3>Speak with <b>Elder Toad</b> on his rock. <span class="obj">' +
+      (isTouch ? 'Hop close and tap the prompt' : '[E] to talk') + '</span>';
+  } else if (save.questStage === 'active') {
+    questEl.innerHTML = `<h3>QUEST — ${q.title}</h3><span class="obj">${q.objective(save.questProgress)}</span>`;
+  } else {
+    questEl.innerHTML = `<h3>QUEST — ${q.title}</h3><span class="obj">✔ Return to Elder Toad</span>`;
+  }
+}
+renderQuest();
+
+// the Golden Fly (quest 3 target) — lives in the normal flies array, bots won't touch it
+let goldenFly = null;
+function spawnGoldenFly() {
+  if (goldenFly) return;
+  spawnFly();
+  goldenFly = flies[flies.length - 1];
+  goldenFly.userData.golden = true;
+  goldenFly.userData.speed = 1.7;
+  goldenFly.scale.setScalar(1.7);
+  goldenFly.traverse(o => {
+    if (o.isMesh && o.geometry !== undefined) {
+      o.material = o.material.clone();
+      if (o.material.opacity === undefined || !o.material.transparent) {
+        o.material.color.set(0xffd857);
+        o.material.emissive = new THREE.Color(0x996600);
+      }
+    }
+  });
+}
+if (save.questIndex === 2 && save.questStage === 'active') spawnGoldenFly();
+
+function questObjectiveDone() {
+  save.questStage = 'turnin';
+  save.questProgress = QUESTS[save.questIndex].target;
+  persist();
+  renderQuest();
+  toast('✔ Return to Elder Toad');
+}
+
+function onFlyEaten(golden) {
+  if (save.questIndex === 0 && save.questStage === 'active') {
+    save.questProgress++;
+    persist();
+    renderQuest();
+    if (save.questProgress >= QUESTS[0].target) questObjectiveDone();
+  }
+  if (golden) {
+    goldenFly = null;
+    if (save.questIndex === 2 && save.questStage === 'active') questObjectiveDone();
+  }
+}
+
+function checkStones() {
+  if (save.questIndex !== 1 || save.questStage !== 'active') return;
+  for (const [i, stone] of stones.entries()) {
+    if (save.stones[i]) continue;
+    if (stone.position.distanceTo(player.pos) < 4.5) {
+      save.stones[i] = true;
+      save.questProgress++;
+      stone.material.emissiveIntensity = 0.85;
+      spawnRipple(stone.position.x, stone.position.z, 1.5);
+      croakSound();
+      toast(`The stone hums an ancient note... (${save.questProgress}/3)`);
+      persist();
+      renderQuest();
+      if (save.questProgress >= 3) questObjectiveDone();
+    }
+  }
+}
+
+function theGreatCroak() {
+  doCroak(me, true);
+  let delay = 200;
+  for (const o of others.values()) {
+    setTimeout(() => doCroak(o.frog, false), delay);
+    delay += 180;
+  }
+  doCroak(elder, false);
+  doCroak(vendor, false);
+  for (let i = 0; i < 10; i++) {
+    const a = Math.random() * Math.PI * 2, r = Math.random() * POND_RADIUS * 0.8;
+    setTimeout(() => spawnRipple(Math.cos(a) * r, Math.sin(a) * r, 1 + Math.random() * 2), i * 150);
+  }
+  toast('♪ THE GREAT CROAK ECHOES ACROSS THE POND ♪');
+}
+
+// ---------------------------------------------------------------- shop
+const SHOP = [
+  { id: 'lily', name: 'Lily Hat', price: 10, desc: 'Fresh from the pond.' },
+  { id: 'top', name: 'Top Hat', price: 20, desc: 'For the distinguished amphibian.' },
+  { id: 'wizard', name: 'Wizard Hat', price: 25, desc: 'Smells faintly of swamp magic.' },
+  { id: 'crown', name: 'Royal Crown', price: 40, desc: 'Every pond needs a monarch.' },
+  { id: 'tongue', name: 'Long Tongue', price: 30, desc: '+3 m tongue reach.', upgrade: true },
+  { id: 'legs', name: 'Spring Legs', price: 30, desc: '+20% hop power.', upgrade: true },
+];
+let tongueRange = TONGUE_RANGE + (save.owned.includes('tongue') ? 3 : 0);
+const hopMult = () => save.owned.includes('legs') ? 1.2 : 1;
+
+// ---------------------------------------------------------------- dialog UI
+const dlg = document.getElementById('dialog');
+const dlgName = document.getElementById('dlgName');
+const dlgText = document.getElementById('dlgText');
+const dlgCoins = document.getElementById('dlgCoins');
+const dlgButtons = document.getElementById('dlgButtons');
+let dialogOpen = null;
+
+function closeDialog() {
+  dlg.style.display = 'none';
+  dialogOpen = null;
+  document.body.classList.remove('dialog-open');
+}
+function showDialog(kind) {
+  dialogOpen = kind;
+  dlg.style.display = 'block';
+  document.body.classList.add('dialog-open'); // touch buttons hide so they can't block dialog taps
+}
+function button(label, onClick, opts = {}) {
+  const b = document.createElement('button');
+  b.textContent = label;
+  if (opts.disabled) b.disabled = true;
+  if (opts.cls) b.className = opts.cls;
+  b.onclick = onClick;
+  dlgButtons.appendChild(b);
+  return b;
+}
+
+function openElderDialog() {
+  showDialog('elder');
+  dlgName.textContent = 'Elder Toad';
+  dlgCoins.textContent = '';
+  dlgButtons.innerHTML = '';
+  if (save.questIndex >= QUESTS.length) {
+    dlgText.textContent = EPILOGUE;
+    button('Farewell', closeDialog);
+    return;
+  }
+  const q = QUESTS[save.questIndex];
+  if (save.questStage === 'none') {
+    dlgText.textContent = q.offer;
+    button('Accept quest: ' + q.title, () => {
+      save.questStage = 'active';
+      save.questProgress = 0;
+      if (save.questIndex === 1) save.stones = [false, false, false];
+      if (save.questIndex === 2) spawnGoldenFly();
+      persist();
+      renderQuest();
+      closeDialog();
+      toast('QUEST ACCEPTED — ' + q.title);
+    });
+    button('Not yet', closeDialog);
+  } else if (save.questStage === 'active') {
+    dlgText.textContent = q.remind;
+    button('I’m on it', closeDialog);
+  } else {
+    dlgText.textContent = q.done;
+    button(`Complete (+${q.reward} 🪙)`, () => {
+      addCoins(q.reward);
+      const finished = save.questIndex === QUESTS.length - 1;
+      save.questIndex++;
+      save.questStage = 'none';
+      save.questProgress = 0;
+      persist();
+      renderQuest();
+      closeDialog();
+      if (finished) theGreatCroak();
+      else toast(`+${q.reward} 🪙`);
+    });
+  }
+}
+
+function openVendorDialog() {
+  showDialog('vendor');
+  dlgName.textContent = 'Madame Bufo’s Bazaar';
+  dlgText.textContent = 'Welcome, dearie. Finest hats and frog-craft this side of the reeds. Coins for flies, treasures for coins — that’s the pond’s way.';
+  dlgCoins.textContent = `You have ${save.coins} 🪙`;
+  dlgButtons.innerHTML = '';
+  for (const item of SHOP) {
+    const owned = save.owned.includes(item.id);
+    let label, action, disabled = false;
+    if (item.upgrade) {
+      if (owned) { label = `✔ ${item.name} — ${item.desc}`; disabled = true; }
+      else {
+        label = `${item.name} — ${item.price} 🪙 — ${item.desc}`;
+        disabled = save.coins < item.price;
+        action = () => {
+          addCoins(-item.price);
+          save.owned.push(item.id);
+          tongueRange = TONGUE_RANGE + (save.owned.includes('tongue') ? 3 : 0);
+          persist();
+          toast(item.name + ' acquired!');
+          openVendorDialog();
+        };
+      }
+    } else if (!owned) {
+      label = `${item.name} — ${item.price} 🪙 — ${item.desc}`;
+      disabled = save.coins < item.price;
+      action = () => {
+        addCoins(-item.price);
+        save.owned.push(item.id);
+        save.hat = item.id;
+        equipHat(me, item.id);
+        sendHatNow();
+        persist();
+        toast('Looking sharp in the ' + item.name + '!');
+        openVendorDialog();
+      };
+    } else if (save.hat === item.id) {
+      label = `✔ ${item.name} (wearing) — take off`;
+      action = () => { save.hat = null; equipHat(me, null); sendHatNow(); persist(); openVendorDialog(); };
+    } else {
+      label = `${item.name} (owned) — wear`;
+      action = () => { save.hat = item.id; equipHat(me, item.id); sendHatNow(); persist(); openVendorDialog(); };
+    }
+    button(label, action, { disabled, cls: 'shop-item' });
+  }
+  button('Leave', closeDialog);
+}
+
+// ---------------------------------------------------------------- interaction
+const promptEl = document.getElementById('prompt');
+function nearbyNpc() {
+  if (elder.group.position.distanceTo(player.pos) < 5) return 'elder';
+  if (vendor.group.position.distanceTo(player.pos) < 5) return 'vendor';
+  return null;
+}
+function tryInteract() {
+  if (dialogOpen) { closeDialog(); return; }
+  const npc = nearbyNpc();
+  if (npc === 'elder') openElderDialog();
+  else if (npc === 'vendor') openVendorDialog();
+}
+
+function questTick(dt, t) {
+  checkStones();
+  // interact prompt + auto-close dialog when hopping away
+  const npc = nearbyNpc();
+  if (npc && !dialogOpen) {
+    promptEl.style.display = 'block';
+    const key = isTouch ? '👆 ' : '[E] ';
+    promptEl.textContent = npc === 'elder' ? key + 'Talk to Elder Toad' : key + 'Browse Madame Bufo’s Bazaar';
+  } else {
+    promptEl.style.display = 'none';
+  }
+  if (dialogOpen && !npc) closeDialog();
+  // quest marker over the Elder: visible when he has something for you
+  const hasBang = save.questIndex < QUESTS.length && save.questStage !== 'active';
+  elderMarker.visible = hasBang;
+  elderMarker.position.y = 2.6 + Math.sin(t * 2.5) * 0.12;
+  for (const npcFrog of npcFrogs) updateFrogAmbient(npcFrog, dt);
+  if (Math.random() < dt * 0.03) doCroak(elder, false);
+  // golden fly glimmer
+  if (goldenFly) goldenFly.rotation.y = t * 3;
+}
+
+// apply saved gear
+equipHat(me, save.hat);
+
+// ---------------------------------------------------------------- touch controls
+const touch = { x: 0, z: 0, big: false };
+if (isTouch) {
+  document.body.classList.add('touch');
+  const stick = document.getElementById('stick');
+  const knob = document.getElementById('knob');
+  const STICK_R = 44;
+  let stickId = null, cx = 0, cy = 0;
+  function moveStick(t) {
+    let dx = t.clientX - cx, dy = t.clientY - cy;
+    const len = Math.hypot(dx, dy);
+    if (len > STICK_R) { dx *= STICK_R / len; dy *= STICK_R / len; }
+    knob.style.transform = `translate(${dx}px, ${dy}px)`;
+    touch.x = Math.abs(dx) > 8 ? dx / STICK_R : 0;
+    touch.z = Math.abs(dy) > 8 ? dy / STICK_R : 0;
+  }
+  stick.addEventListener('touchstart', e => {
+    e.preventDefault();
+    ensureAudio();
+    const t = e.changedTouches[0];
+    stickId = t.identifier;
+    const rect = stick.getBoundingClientRect();
+    cx = rect.left + rect.width / 2;
+    cy = rect.top + rect.height / 2;
+    moveStick(t);
+  }, { passive: false });
+  stick.addEventListener('touchmove', e => {
+    e.preventDefault();
+    for (const t of e.changedTouches) if (t.identifier === stickId) moveStick(t);
+  }, { passive: false });
+  const endStick = e => {
+    for (const t of e.changedTouches) if (t.identifier === stickId) {
+      stickId = null;
+      touch.x = touch.z = 0;
+      knob.style.transform = '';
+    }
+  };
+  stick.addEventListener('touchend', endStick);
+  stick.addEventListener('touchcancel', endStick);
+
+  function bindButton(id, down, up) {
+    const el = document.getElementById(id);
+    el.addEventListener('touchstart', e => { e.preventDefault(); ensureAudio(); down(); }, { passive: false });
+    if (up) {
+      el.addEventListener('touchend', up);
+      el.addEventListener('touchcancel', up);
+    }
+  }
+  bindButton('btnJump', () => touch.big = true, () => touch.big = false);
+  bindButton('btnTongue', () => tryTongue(me, player, true));
+  bindButton('btnCroak', () => doCroak(me, true));
+  // the NPC prompt becomes a tap target on touch devices
+  promptEl.style.pointerEvents = 'auto';
+  promptEl.addEventListener('click', tryInteract);
+}
+
+// ---------------------------------------------------------------- other frogs: bots OR network players
+const others = new Map(); // id -> {frog, entity, isBot, targetPos, name}
+
+function addOther(id, name, color, isBot, hat) {
+  const frog = makeFrog(color, name, isBot ? '#cfd8dc' : '#7dffb0');
+  if (hat) equipHat(frog, hat);
+  const r = 5 + Math.random() * (POND_RADIUS - 10);
+  const a = Math.random() * Math.PI * 2;
+  const entity = {
+    pos: frog.group.position,
+    vel: new THREE.Vector3(),
+    heading: Math.random() * Math.PI * 2,
+    grounded: true,
+    hopCooldown: 1 + Math.random() * 2,
+  };
+  entity.pos.set(Math.cos(a) * r, WATER_Y, Math.sin(a) * r);
+  scene.add(frog.group);
+  others.set(id, { frog, entity, isBot, name, netPos: new THREE.Vector3(), netHeading: 0 });
+  updatePop();
+}
+function removeOther(id) {
+  const o = others.get(id);
+  if (o) { scene.remove(o.frog.group); others.delete(id); updatePop(); }
+}
+function updatePop() {
+  const n = others.size + 1;
+  document.getElementById('pop').textContent = n + (n === 1 ? ' frog' : ' frogs') + ' in the pond';
+}
+
+function updateBots(dt) {
+  for (const o of others.values()) {
+    if (!o.isBot) continue;
+    const e = o.entity;
+    e.hopCooldown -= dt;
+    if (e.grounded && e.hopCooldown <= 0) {
+      // hop toward the nearest fly sometimes, otherwise wander
+      let dir = Math.random() * Math.PI * 2;
+      let nearest = null, nd = Infinity;
+      for (const fly of flies) {
+        const d = fly.position.distanceTo(e.pos);
+        if (d < nd) { nd = d; nearest = fly; }
+      }
+      if (nearest && Math.random() < 0.6) {
+        dir = Math.atan2(nearest.position.x - e.pos.x, nearest.position.z - e.pos.z);
+      }
+      // stay near the pond
+      if (Math.hypot(e.pos.x, e.pos.z) > POND_RADIUS - 3 && Math.random() < 0.8) {
+        dir = Math.atan2(-e.pos.x, -e.pos.z) + (Math.random() - 0.5);
+      }
+      e.heading = dir;
+      hop(e, dir, Math.random() < 0.2);
+      e.hopCooldown = 0.6 + Math.random() * 2.2;
+      if (Math.random() < 0.05) doCroak(o.frog, false);
+    }
+    if (e.grounded && Math.random() < dt * 0.4) tryTongue(o.frog, e, false);
+    stepPhysics(e, o.frog.group, dt);
+    updateTongue(o.frog, dt);
+  }
+}
+
+// ---------------------------------------------------------------- networking
+const net = { ws: null, id: null, lastSend: 0 };
+const statusEl = document.getElementById('status');
+
+function connect() {
+  if (!serverUrl) return spawnBots();
+  let opened = false;
+  try { net.ws = new WebSocket(serverUrl); } catch { return spawnBots(); }
+  net.ws.onopen = () => {
+    opened = true;
+    net.ws.send(JSON.stringify({ type: 'join', name: myName, color: myColor, hat: save.hat }));
+    statusEl.textContent = 'ONLINE · ' + serverUrl.replace(/^wss?:\/\//, '');
+    statusEl.className = 'online';
+  };
+  net.ws.onmessage = ev => {
+    const msg = JSON.parse(ev.data);
+    if (msg.type === 'welcome') {
+      net.id = msg.id;
+      for (const p of msg.players) if (p.id !== net.id) addOther(p.id, p.name, p.color, false, p.hat);
+    } else if (msg.type === 'join' && msg.id !== net.id) {
+      addOther(msg.id, msg.name, msg.color, false, msg.hat);
+      toast(msg.name + ' hopped in!');
+    } else if (msg.type === 'leave') {
+      removeOther(msg.id);
+    } else if (msg.type === 'state') {
+      for (const p of msg.players) {
+        if (p.id === net.id) continue;
+        const o = others.get(p.id);
+        if (o) {
+          o.netPos.set(p.x, p.y, p.z);
+          o.netHeading = p.ry;
+          if ((p.hat || null) !== (o.frog.hatId || null)) equipHat(o.frog, p.hat);
+        }
+      }
+    } else if (msg.type === 'croak') {
+      const o = others.get(msg.id);
+      if (o) doCroak(o.frog, false);
+    }
+  };
+  net.ws.onerror = () => { if (!opened) fallbackToBots(); };
+  net.ws.onclose = () => { if (!opened) fallbackToBots(); else { statusEl.textContent = 'DISCONNECTED · BOT FROGS'; statusEl.className = 'offline'; fallbackToBots(true); } };
+}
+
+let botsSpawned = false;
+function fallbackToBots(clearFirst) {
+  net.ws = null;
+  if (clearFirst) for (const id of [...others.keys()]) removeOther(id);
+  spawnBots();
+}
+
+function spawnBots() {
+  if (botsSpawned) return; // onerror and onclose can both fire on a failed connect
+  botsSpawned = true;
+  const used = new Set([myName]);
+  for (let i = 0; i < 6; i++) {
+    let name;
+    do { name = FROG_NAMES[Math.floor(Math.random() * FROG_NAMES.length)]; } while (used.has(name));
+    used.add(name);
+    const botHat = Math.random() < 0.4 ? ['lily', 'top', 'wizard'][Math.floor(Math.random() * 3)] : null;
+    addOther('bot' + i, name, FROG_COLORS[(i * 3 + 1) % FROG_COLORS.length], true, botHat);
+  }
+}
+
+function netUpdate(now) {
+  if (!net.ws || net.ws.readyState !== 1) return;
+  if (now - net.lastSend < NET_RATE_MS) return;
+  net.lastSend = now;
+  net.ws.send(JSON.stringify({
+    type: 'state',
+    x: +player.pos.x.toFixed(2), y: +player.pos.y.toFixed(2), z: +player.pos.z.toFixed(2),
+    ry: +player.heading.toFixed(2),
+    hat: save.hat,
+  }));
+}
+
+function sendHatNow() {
+  if (net.ws && net.ws.readyState === 1) net.lastSend = 0; // flush hat change on next tick
+}
+
+function updateRemotes(dt) {
+  for (const o of others.values()) {
+    if (o.isBot) continue;
+    // simple interpolation toward last received state
+    o.entity.pos.lerp(o.netPos, Math.min(1, dt * 10));
+    let dh = o.netHeading - o.entity.heading;
+    while (dh > Math.PI) dh -= Math.PI * 2;
+    while (dh < -Math.PI) dh += Math.PI * 2;
+    o.entity.heading += dh * Math.min(1, dt * 10);
+    o.frog.group.position.copy(o.entity.pos);
+    o.frog.group.rotation.y = o.entity.heading;
+    updateTongue(o.frog, dt);
+  }
+}
+
+connect();
+
+// tiny debug handle for automated tests
+window.__cf = { player, save, me, flies, others, onFlyEaten };
+
+// ---------------------------------------------------------------- main loop
+const clock = new THREE.Clock();
+function animate() {
+  requestAnimationFrame(animate);
+  const dt = Math.min(clock.getDelta(), 0.05);
+  const t = clock.elapsedTime;
+
+  // input → hops
+  player.hopCooldown -= dt;
+  let ix = 0, iz = 0;
+  if (keys.KeyW || keys.ArrowUp) iz -= 1;
+  if (keys.KeyS || keys.ArrowDown) iz += 1;
+  if (keys.KeyA || keys.ArrowLeft) ix -= 1;
+  if (keys.KeyD || keys.ArrowRight) ix += 1;
+  ix += touch.x;
+  iz += touch.z;
+  const wantBig = !!keys.Space || touch.big;
+  if (player.grounded && player.hopCooldown <= 0 && (ix || iz || wantBig)) {
+    if (ix || iz) player.heading = Math.atan2(ix, iz); // screen-relative: W/stick-up = away from camera
+    hop(player, player.heading, wantBig, hopMult());
+    player.hopCooldown = 0.28;
+  }
+  stepPhysics(player, me.group, dt);
+  updateTongue(me, dt);
+
+  updateFlies(t, dt);
+  updateBots(dt);
+  updateRemotes(dt);
+  netUpdate(performance.now());
+
+  // quests, NPCs, interaction prompts
+  questTick(dt, t);
+
+  // ambience: blinking, croak sacs, ripples, fireflies, swaying reeds, drifting clouds
+  updateFrogAmbient(me, dt);
+  for (const o of others.values()) updateFrogAmbient(o.frog, dt);
+  updateRipples(dt);
+  updateFireflies(t);
+  waterUniforms.uTime.value = t;
+  for (const tail of cattails) tail.rotation.z = Math.sin(t * 1.1 + tail.userData.phase) * tail.userData.amp;
+  for (const cloud of clouds) {
+    cloud.userData.angle += dt * 0.004;
+    cloud.position.x = Math.cos(cloud.userData.angle) * cloud.userData.radius;
+    cloud.position.z = Math.sin(cloud.userData.angle) * cloud.userData.radius;
+  }
+
+  // bob the lily pads
+  for (const pad of pads) pad.position.y = WATER_Y + 0.1 + Math.sin(t * 1.2 + pad.userData.bobPhase) * 0.04;
+
+  // camera follows behind the player
+  const camTarget = new THREE.Vector3(player.pos.x, player.pos.y + 2.5, player.pos.z + 9);
+  camera.position.lerp(camTarget, Math.min(1, dt * 4));
+  camera.lookAt(player.pos.x, player.pos.y + 1, player.pos.z);
+
+  renderer.render(scene, camera);
+}
+animate();
+
+addEventListener('resize', () => {
+  camera.aspect = innerWidth / innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth, innerHeight);
+});
+</script>
+</body>
+</html>
