@@ -772,12 +772,23 @@ function toast(msg) {
 }
 
 // ---------------------------------------------------------------- save data
+// localStorage is unavailable in sandboxed iframes / private browsing; fall back to in-memory
+const storage = (() => {
+  try {
+    localStorage.setItem('__cf_probe', '1');
+    localStorage.removeItem('__cf_probe');
+    return localStorage;
+  } catch {
+    const mem = new Map();
+    return { getItem: k => mem.get(k) ?? null, setItem: (k, v) => mem.set(k, String(v)) };
+  }
+})();
 const SAVE_KEY = 'croakfall_save_v1';
 const save = Object.assign(
   { coins: 0, owned: [], hat: null, questIndex: 0, questStage: 'none', questProgress: 0, stones: [false, false, false] },
-  JSON.parse(localStorage.getItem(SAVE_KEY) || '{}')
+  JSON.parse(storage.getItem(SAVE_KEY) || '{}')
 );
-function persist() { localStorage.setItem(SAVE_KEY, JSON.stringify(save)); }
+function persist() { storage.setItem(SAVE_KEY, JSON.stringify(save)); }
 function addCoins(n) {
   save.coins += n;
   document.getElementById('coins').textContent = save.coins;
