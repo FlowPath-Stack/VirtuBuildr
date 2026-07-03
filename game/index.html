@@ -7,7 +7,7 @@
 <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🐸</text></svg>">
 <style>
   html, body { margin: 0; padding: 0; overflow: hidden; height: 100%; background: #0a1f14; }
-  canvas { display: block; }
+  canvas { display: block; touch-action: none; }
   #hud {
     position: fixed; inset: 0; pointer-events: none;
     font-family: "Trebuchet MS", Verdana, sans-serif; color: #eafff2;
@@ -68,6 +68,40 @@
   #dlgButtons button:hover { background: #3e8e41; }
   #dlgButtons button:disabled { opacity: .45; cursor: default; }
   #dlgButtons button.shop-item { display: block; width: 100%; text-align: left; }
+  /* touch controls — shown only on coarse-pointer devices */
+  #touch { display: none; }
+  body.touch #touch { display: block; }
+  body.touch #help { display: none; }
+  body.touch #prompt { bottom: 170px; }
+  #stick {
+    position: fixed; left: 22px; bottom: 28px; width: 130px; height: 130px;
+    border-radius: 50%; background: rgba(255,255,255,.08);
+    border: 2px solid rgba(255,255,255,.25); pointer-events: auto; touch-action: none;
+  }
+  #knob {
+    position: absolute; left: 50%; top: 50%; width: 54px; height: 54px; margin: -27px;
+    border-radius: 50%; background: rgba(184,255,122,.45); border: 2px solid rgba(184,255,122,.8);
+  }
+  .tbtn {
+    position: fixed; border-radius: 50%; pointer-events: auto; touch-action: none;
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    font-weight: 800; color: #eafff2; background: rgba(46,94,51,.55);
+    border: 2px solid rgba(184,255,122,.5); user-select: none; -webkit-user-select: none;
+  }
+  .tbtn:active { background: rgba(62,142,65,.8); }
+  .tbtn span { font-size: 9px; letter-spacing: 1px; }
+  #btnTongue { right: 24px; bottom: 30px; width: 92px; height: 92px; font-size: 30px; }
+  #btnJump { right: 126px; bottom: 66px; width: 68px; height: 68px; font-size: 22px; }
+  #btnCroak { right: 44px; bottom: 138px; width: 58px; height: 58px; font-size: 20px; }
+  body.dialog-open #touch { display: none; }
+  @media (max-width: 600px) {
+    #title { font-size: 16px; }
+    #score { font-size: 12px; }
+    #score b { font-size: 16px; }
+    #status { top: 62px; font-size: 10px; }
+    #quest { top: 84px; max-width: 210px; font-size: 11px; padding: 8px 10px; }
+    #dialog { bottom: 24px; font-size: 13px; }
+  }
 </style>
 </head>
 <body>
@@ -79,6 +113,12 @@
   <div id="help">WASD hop &nbsp;&bull;&nbsp; SPACE big jump &nbsp;&bull;&nbsp; CLICK tongue-snap a fly &nbsp;&bull;&nbsp; C croak &nbsp;&bull;&nbsp; E talk</div>
   <div id="prompt"></div>
   <div id="dialog"><h2 id="dlgName"></h2><div id="dlgText"></div><div class="coins-line" id="dlgCoins"></div><div id="dlgButtons"></div></div>
+  <div id="touch">
+    <div id="stick"><div id="knob"></div></div>
+    <div class="tbtn" id="btnJump">⬆<span>JUMP</span></div>
+    <div class="tbtn" id="btnTongue">👅<span>SNAP</span></div>
+    <div class="tbtn" id="btnCroak">🐸<span>CROAK</span></div>
+  </div>
   <div id="toast"></div>
 </div>
 <script type="module">
@@ -99,6 +139,7 @@ const FROG_NAMES = ['Sir Ribbitsworth', 'Padwina', 'Hopscotch', 'Bogart', 'Lily 
   'Croakus Maximus', 'Jumpelstiltskin', 'Tad Pole', 'Warty Harry', 'Peeper'];
 const FROG_COLORS = [0x4caf50, 0x7cb342, 0x26a69a, 0x9ccc65, 0x66bb6a, 0x00897b, 0xaed581, 0x43a047];
 
+const isTouch = matchMedia('(pointer: coarse)').matches || 'ontouchstart' in window;
 const params = new URLSearchParams(location.search);
 const myName = params.get('name') || FROG_NAMES[Math.floor(Math.random() * FROG_NAMES.length)];
 const serverUrl = params.get('server') ||
@@ -748,7 +789,7 @@ function updateTongue(frog, dt) {
 }
 
 addEventListener('mousedown', e => {
-  if (e.target.closest && e.target.closest('#dialog')) return; // UI clicks aren't tongue-snaps
+  if (e.target.closest && e.target.closest('#dialog, #prompt')) return; // UI clicks aren't tongue-snaps
   ensureAudio();
   tryTongue(me, player, true);
 });
@@ -971,7 +1012,8 @@ function renderQuest() {
   }
   const q = QUESTS[save.questIndex];
   if (save.questStage === 'none') {
-    questEl.innerHTML = '<h3>QUEST</h3>Speak with <b>Elder Toad</b> on his rock. <span class="obj">[E] to talk</span>';
+    questEl.innerHTML = '<h3>QUEST</h3>Speak with <b>Elder Toad</b> on his rock. <span class="obj">' +
+      (isTouch ? 'Hop close and tap the prompt' : '[E] to talk') + '</span>';
   } else if (save.questStage === 'active') {
     questEl.innerHTML = `<h3>QUEST — ${q.title}</h3><span class="obj">${q.objective(save.questProgress)}</span>`;
   } else {
@@ -1076,7 +1118,16 @@ const dlgCoins = document.getElementById('dlgCoins');
 const dlgButtons = document.getElementById('dlgButtons');
 let dialogOpen = null;
 
-function closeDialog() { dlg.style.display = 'none'; dialogOpen = null; }
+function closeDialog() {
+  dlg.style.display = 'none';
+  dialogOpen = null;
+  document.body.classList.remove('dialog-open');
+}
+function showDialog(kind) {
+  dialogOpen = kind;
+  dlg.style.display = 'block';
+  document.body.classList.add('dialog-open'); // touch buttons hide so they can't block dialog taps
+}
 function button(label, onClick, opts = {}) {
   const b = document.createElement('button');
   b.textContent = label;
@@ -1088,8 +1139,7 @@ function button(label, onClick, opts = {}) {
 }
 
 function openElderDialog() {
-  dialogOpen = 'elder';
-  dlg.style.display = 'block';
+  showDialog('elder');
   dlgName.textContent = 'Elder Toad';
   dlgCoins.textContent = '';
   dlgButtons.innerHTML = '';
@@ -1133,8 +1183,7 @@ function openElderDialog() {
 }
 
 function openVendorDialog() {
-  dialogOpen = 'vendor';
-  dlg.style.display = 'block';
+  showDialog('vendor');
   dlgName.textContent = 'Madame Bufo’s Bazaar';
   dlgText.textContent = 'Welcome, dearie. Finest hats and frog-craft this side of the reeds. Coins for flies, treasures for coins — that’s the pond’s way.';
   dlgCoins.textContent = `You have ${save.coins} 🪙`;
@@ -1201,7 +1250,8 @@ function questTick(dt, t) {
   const npc = nearbyNpc();
   if (npc && !dialogOpen) {
     promptEl.style.display = 'block';
-    promptEl.textContent = npc === 'elder' ? '[E] Talk to Elder Toad' : '[E] Browse Madame Bufo’s Bazaar';
+    const key = isTouch ? '👆 ' : '[E] ';
+    promptEl.textContent = npc === 'elder' ? key + 'Talk to Elder Toad' : key + 'Browse Madame Bufo’s Bazaar';
   } else {
     promptEl.style.display = 'none';
   }
@@ -1218,6 +1268,62 @@ function questTick(dt, t) {
 
 // apply saved gear
 equipHat(me, save.hat);
+
+// ---------------------------------------------------------------- touch controls
+const touch = { x: 0, z: 0, big: false };
+if (isTouch) {
+  document.body.classList.add('touch');
+  const stick = document.getElementById('stick');
+  const knob = document.getElementById('knob');
+  const STICK_R = 44;
+  let stickId = null, cx = 0, cy = 0;
+  function moveStick(t) {
+    let dx = t.clientX - cx, dy = t.clientY - cy;
+    const len = Math.hypot(dx, dy);
+    if (len > STICK_R) { dx *= STICK_R / len; dy *= STICK_R / len; }
+    knob.style.transform = `translate(${dx}px, ${dy}px)`;
+    touch.x = Math.abs(dx) > 8 ? dx / STICK_R : 0;
+    touch.z = Math.abs(dy) > 8 ? dy / STICK_R : 0;
+  }
+  stick.addEventListener('touchstart', e => {
+    e.preventDefault();
+    ensureAudio();
+    const t = e.changedTouches[0];
+    stickId = t.identifier;
+    const rect = stick.getBoundingClientRect();
+    cx = rect.left + rect.width / 2;
+    cy = rect.top + rect.height / 2;
+    moveStick(t);
+  }, { passive: false });
+  stick.addEventListener('touchmove', e => {
+    e.preventDefault();
+    for (const t of e.changedTouches) if (t.identifier === stickId) moveStick(t);
+  }, { passive: false });
+  const endStick = e => {
+    for (const t of e.changedTouches) if (t.identifier === stickId) {
+      stickId = null;
+      touch.x = touch.z = 0;
+      knob.style.transform = '';
+    }
+  };
+  stick.addEventListener('touchend', endStick);
+  stick.addEventListener('touchcancel', endStick);
+
+  function bindButton(id, down, up) {
+    const el = document.getElementById(id);
+    el.addEventListener('touchstart', e => { e.preventDefault(); ensureAudio(); down(); }, { passive: false });
+    if (up) {
+      el.addEventListener('touchend', up);
+      el.addEventListener('touchcancel', up);
+    }
+  }
+  bindButton('btnJump', () => touch.big = true, () => touch.big = false);
+  bindButton('btnTongue', () => tryTongue(me, player, true));
+  bindButton('btnCroak', () => doCroak(me, true));
+  // the NPC prompt becomes a tap target on touch devices
+  promptEl.style.pointerEvents = 'auto';
+  promptEl.addEventListener('click', tryInteract);
+}
 
 // ---------------------------------------------------------------- other frogs: bots OR network players
 const others = new Map(); // id -> {frog, entity, isBot, targetPos, name}
@@ -1392,9 +1498,12 @@ function animate() {
   if (keys.KeyS || keys.ArrowDown) iz += 1;
   if (keys.KeyA || keys.ArrowLeft) ix -= 1;
   if (keys.KeyD || keys.ArrowRight) ix += 1;
-  if (player.grounded && player.hopCooldown <= 0 && (ix || iz || keys.Space)) {
-    if (ix || iz) player.heading = Math.atan2(ix, iz) + Math.PI; // camera-relative-ish: W = away from camera
-    hop(player, player.heading, !!keys.Space, hopMult());
+  ix += touch.x;
+  iz += touch.z;
+  const wantBig = !!keys.Space || touch.big;
+  if (player.grounded && player.hopCooldown <= 0 && (ix || iz || wantBig)) {
+    if (ix || iz) player.heading = Math.atan2(ix, iz); // screen-relative: W/stick-up = away from camera
+    hop(player, player.heading, wantBig, hopMult());
     player.hopCooldown = 0.28;
   }
   stepPhysics(player, me.group, dt);
