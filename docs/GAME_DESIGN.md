@@ -20,6 +20,8 @@ bots. Eat flies, out-hop rivals, claim lily pads, and croak your dominance.
 | Bot frogs that hop, hunt flies, and croak | ✅ (offline mode) |
 | Real multiplayer: join/leave, 10 Hz position relay, croak relay | ✅ `server/server.js` |
 | Name tags, player count, online/offline HUD | ✅ |
+| Golden-hour rendering: gradient sky + sun glow, shader water with swell/sparkle, ACES tone mapping | ✅ |
+| Ambience: splash ripples, fireflies, drifting clouds, swaying cattails, blinking eyes, croak throat sac | ✅ |
 
 Zero build step. Three.js is vendored (`game/vendor/`), so `game/index.html`
 runs from disk with no install. The server is optional — without it the pond

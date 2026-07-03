@@ -12,6 +12,7 @@
     position: fixed; inset: 0; pointer-events: none;
     font-family: "Trebuchet MS", Verdana, sans-serif; color: #eafff2;
     text-shadow: 0 1px 3px rgba(0,0,0,.6);
+    background: radial-gradient(ellipse at center, transparent 58%, rgba(8,14,26,.38) 100%);
   }
   #title {
     position: absolute; top: 14px; left: 18px; font-size: 22px; font-weight: 800;
@@ -77,18 +78,82 @@ renderer.setSize(innerWidth, innerHeight);
 renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
 renderer.shadowMap.enabled = true;
 renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.1;
 document.body.appendChild(renderer.domElement);
 
 const scene = new THREE.Scene();
-scene.background = new THREE.Color(0x87c5eb);
-scene.fog = new THREE.Fog(0x87c5eb, 60, 140);
+scene.fog = new THREE.Fog(0xf0bd88, 70, 175);
+
+// golden-hour gradient sky dome with a sun glow baked into the shader
+const sky = new THREE.Mesh(
+  new THREE.SphereGeometry(220, 32, 16),
+  new THREE.ShaderMaterial({
+    side: THREE.BackSide,
+    depthWrite: false,
+    uniforms: { uSunDir: { value: new THREE.Vector3(0.55, 0.28, -0.79).normalize() } },
+    vertexShader: `
+      varying vec3 vDir;
+      void main() {
+        vDir = normalize(position);
+        gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+      }`,
+    fragmentShader: `
+      uniform vec3 uSunDir;
+      varying vec3 vDir;
+      void main() {
+        float h = clamp(vDir.y, 0.0, 1.0);
+        vec3 zenith = vec3(0.16, 0.24, 0.48);
+        vec3 mid = vec3(0.55, 0.62, 0.85);
+        vec3 horizon = vec3(1.0, 0.72, 0.45);
+        vec3 col = mix(horizon, mid, smoothstep(0.0, 0.25, h));
+        col = mix(col, zenith, smoothstep(0.25, 0.85, h));
+        float sun = max(dot(vDir, uSunDir), 0.0);
+        col += vec3(1.0, 0.75, 0.4) * (pow(sun, 350.0) * 1.2 + pow(sun, 12.0) * 0.35);
+        gl_FragColor = vec4(col, 1.0);
+      }`,
+  })
+);
+scene.add(sky);
+
+// drifting cloud billboards
+function makeCloudTexture() {
+  const cv = document.createElement('canvas');
+  cv.width = 256; cv.height = 128;
+  const ctx = cv.getContext('2d');
+  for (let i = 0; i < 14; i++) {
+    const x = 40 + Math.random() * 176, y = 45 + Math.random() * 40, r = 18 + Math.random() * 26;
+    const grad = ctx.createRadialGradient(x, y, 0, x, y, r);
+    grad.addColorStop(0, 'rgba(255,240,225,0.55)');
+    grad.addColorStop(1, 'rgba(255,240,225,0)');
+    ctx.fillStyle = grad;
+    ctx.fillRect(0, 0, 256, 128);
+  }
+  return new THREE.CanvasTexture(cv);
+}
+const clouds = [];
+const cloudTex = makeCloudTexture();
+for (let i = 0; i < 9; i++) {
+  const cloud = new THREE.Sprite(new THREE.SpriteMaterial({ map: cloudTex, transparent: true, opacity: 0.8, depthWrite: false }));
+  const a = Math.random() * Math.PI * 2;
+  const r = 120 + Math.random() * 70;
+  cloud.position.set(Math.cos(a) * r, 35 + Math.random() * 35, Math.sin(a) * r);
+  cloud.scale.set(45 + Math.random() * 35, 16 + Math.random() * 10, 1);
+  cloud.userData.angle = a;
+  cloud.userData.radius = r;
+  scene.add(cloud);
+  clouds.push(cloud);
+}
 
 const camera = new THREE.PerspectiveCamera(55, innerWidth / innerHeight, 0.1, 300);
 
-const hemi = new THREE.HemisphereLight(0xbfe3ff, 0x2e5e33, 0.9);
+const hemi = new THREE.HemisphereLight(0x9db4e6, 0x3d4a2a, 0.75);
 scene.add(hemi);
-const sun = new THREE.DirectionalLight(0xfff2cc, 1.6);
-sun.position.set(30, 45, 20);
+const fill = new THREE.DirectionalLight(0x7a8fd4, 0.35); // cool bounce from the sky opposite the sun
+fill.position.set(-40, 25, 45);
+scene.add(fill);
+const sun = new THREE.DirectionalLight(0xffca85, 2.2);
+sun.position.set(44, 22, -63);
 sun.castShadow = true;
 sun.shadow.mapSize.set(2048, 2048);
 sun.shadow.camera.left = -70; sun.shadow.camera.right = 70;
@@ -96,14 +161,73 @@ sun.shadow.camera.top = 70; sun.shadow.camera.bottom = -70;
 scene.add(sun);
 
 // ---------------------------------------------------------------- pond world
+// animated shader water: gentle swell, depth gradient, sun sparkle
+const waterUniforms = { uTime: { value: 0 } };
 const water = new THREE.Mesh(
-  new THREE.CircleGeometry(POND_RADIUS, 64),
-  new THREE.MeshStandardMaterial({ color: 0x2e7fa8, roughness: 0.25, metalness: 0.1, transparent: true, opacity: 0.92 })
+  new THREE.CircleGeometry(POND_RADIUS, 96),
+  new THREE.ShaderMaterial({
+    transparent: true,
+    uniforms: waterUniforms,
+    vertexShader: `
+      uniform float uTime;
+      varying vec2 vXY;
+      varying float vWave;
+      void main() {
+        vec3 p = position;
+        float w = sin(p.x * 0.35 + uTime * 1.3) * cos(p.y * 0.3 + uTime * 0.9)
+                + sin((p.x + p.y) * 0.14 - uTime * 0.6);
+        p.z += w * 0.09; // local z is world up (plane is rotated flat)
+        vXY = p.xy;
+        vWave = w;
+        gl_Position = projectionMatrix * modelViewMatrix * vec4(p, 1.0);
+      }`,
+    fragmentShader: `
+      uniform float uTime;
+      varying vec2 vXY;
+      varying float vWave;
+      void main() {
+        float d = length(vXY);
+        vec3 deep = vec3(0.08, 0.22, 0.33);
+        vec3 shallow = vec3(0.25, 0.5, 0.49);
+        vec3 col = mix(deep, shallow, smoothstep(18.0, ${POND_RADIUS}.0, d));
+        // slow caustic-ish bands
+        float band = sin(vXY.x * 0.7 + sin(vXY.y * 0.5 + uTime * 0.8) * 2.2 + uTime * 1.1) * 0.5 + 0.5;
+        col += band * 0.035;
+        // golden sun sparkle riding the swell
+        float sp = sin(vXY.x * 2.8 + uTime * 2.1) * sin(vXY.y * 3.1 - uTime * 1.6) * (0.6 + vWave * 0.4);
+        col += vec3(1.0, 0.72, 0.4) * pow(max(sp, 0.0), 9.0) * 0.5;
+        gl_FragColor = vec4(col, 0.94);
+      }`,
+  })
 );
 water.rotation.x = -Math.PI / 2;
 water.position.y = WATER_Y;
-water.receiveShadow = true;
 scene.add(water);
+
+// expanding ripple rings where frogs splash down
+const ripples = [];
+const rippleGeo = new THREE.RingGeometry(0.55, 0.68, 32);
+function spawnRipple(x, z, size = 1) {
+  const ring = new THREE.Mesh(rippleGeo, new THREE.MeshBasicMaterial({
+    color: 0xd8f2ec, transparent: true, opacity: 0.55, depthWrite: false,
+  }));
+  ring.rotation.x = -Math.PI / 2;
+  ring.position.set(x, WATER_Y + 0.03, z);
+  ring.userData = { t: 0, size };
+  scene.add(ring);
+  ripples.push(ring);
+}
+function updateRipples(dt) {
+  for (let i = ripples.length - 1; i >= 0; i--) {
+    const ring = ripples[i];
+    ring.userData.t += dt;
+    const t = ring.userData.t;
+    const s = (1 + t * 4) * ring.userData.size;
+    ring.scale.set(s, s, 1);
+    ring.material.opacity = 0.55 * Math.max(0, 1 - t);
+    if (t >= 1) { scene.remove(ring); ring.material.dispose(); ripples.splice(i, 1); }
+  }
+}
 
 const shore = new THREE.Mesh(
   new THREE.RingGeometry(POND_RADIUS - 0.5, POND_RADIUS + 60, 64),
@@ -122,7 +246,8 @@ for (let i = 0; i < 34; i++) {
   const r = 4 + Math.random() * (POND_RADIUS - 8);
   const a = Math.random() * Math.PI * 2;
   const scale = 1.4 + Math.random() * 1.8;
-  const pad = new THREE.Mesh(padGeo, padMat);
+  const pad = new THREE.Mesh(padGeo, padMat.clone());
+  pad.material.color.offsetHSL((Math.random() - 0.5) * 0.03, 0, (Math.random() - 0.5) * 0.07);
   pad.scale.set(scale, 1, scale);
   pad.position.set(Math.cos(a) * r, WATER_Y + 0.1, Math.sin(a) * r);
   pad.rotation.y = Math.random() * Math.PI * 2;
@@ -132,20 +257,140 @@ for (let i = 0; i < 34; i++) {
   pads.push(pad);
 }
 
-// cattails and rocks around the shore
+// lotus flowers on a few pads
+const petalMat = new THREE.MeshStandardMaterial({ color: 0xffc4d6, roughness: 0.6 });
+const pistilMat = new THREE.MeshStandardMaterial({ color: 0xffd857, roughness: 0.5, emissive: 0x554400 });
+for (let i = 0; i < 7; i++) {
+  const pad = pads[Math.floor(Math.random() * pads.length)];
+  const flower = new THREE.Group();
+  for (let p = 0; p < 6; p++) {
+    const petal = new THREE.Mesh(new THREE.ConeGeometry(0.14, 0.5, 6), petalMat);
+    const a = (p / 6) * Math.PI * 2;
+    petal.position.set(Math.cos(a) * 0.18, 0.16, Math.sin(a) * 0.18);
+    petal.rotation.set(Math.cos(a) * 0.9, 0, -Math.sin(a) * 0.9);
+    flower.add(petal);
+  }
+  const pistil = new THREE.Mesh(new THREE.SphereGeometry(0.12, 10, 8), pistilMat);
+  pistil.position.y = 0.18;
+  flower.add(pistil);
+  // world-space (pads are non-uniformly scaled, so parenting would distort the petals)
+  flower.position.set(
+    pad.position.x + (Math.random() - 0.5) * pad.userData.radius * 0.7,
+    WATER_Y + 0.22,
+    pad.position.z + (Math.random() - 0.5) * pad.userData.radius * 0.7
+  );
+  flower.traverse(o => { if (o.isMesh) o.castShadow = true; });
+  scene.add(flower);
+}
+
+// cattails around the shore — grouped at the base so they sway from the roots
+const cattails = [];
 const stalkMat = new THREE.MeshStandardMaterial({ color: 0x6b8f3a, roughness: 1 });
 const headMat = new THREE.MeshStandardMaterial({ color: 0x6d4c2f, roughness: 1 });
 for (let i = 0; i < 60; i++) {
   const a = Math.random() * Math.PI * 2;
   const r = POND_RADIUS + 1 + Math.random() * 6;
   const h = 2 + Math.random() * 2.5;
+  const tail = new THREE.Group();
+  tail.position.set(Math.cos(a) * r, 0, Math.sin(a) * r);
   const stalk = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.09, h, 6), stalkMat);
-  stalk.position.set(Math.cos(a) * r, h / 2, Math.sin(a) * r);
-  stalk.rotation.z = (Math.random() - 0.5) * 0.15;
+  stalk.position.y = h / 2;
   const head = new THREE.Mesh(new THREE.CapsuleGeometry(0.16, 0.7, 4, 8), headMat);
-  head.position.set(stalk.position.x, h + 0.2, stalk.position.z);
+  head.position.y = h + 0.2;
   stalk.castShadow = head.castShadow = true;
-  scene.add(stalk, head);
+  tail.add(stalk, head);
+  tail.userData = { phase: Math.random() * Math.PI * 2, amp: 0.05 + Math.random() * 0.06 };
+  scene.add(tail);
+  cattails.push(tail);
+}
+
+// grass tufts on the shore: crossed alpha-textured planes
+function makeGrassTexture() {
+  const cv = document.createElement('canvas');
+  cv.width = 128; cv.height = 128;
+  const ctx = cv.getContext('2d');
+  for (let b = 0; b < 9; b++) {
+    const x = 12 + b * 13 + Math.random() * 6;
+    const lean = (Math.random() - 0.5) * 30;
+    const grad = ctx.createLinearGradient(0, 128, 0, 30);
+    grad.addColorStop(0, '#3c5a22');
+    grad.addColorStop(1, '#7a9c40');
+    ctx.strokeStyle = grad;
+    ctx.lineWidth = 4;
+    ctx.beginPath();
+    ctx.moveTo(x, 128);
+    ctx.quadraticCurveTo(x + lean * 0.4, 70, x + lean, 20 + Math.random() * 25);
+    ctx.stroke();
+  }
+  return new THREE.CanvasTexture(cv);
+}
+const grassMat = new THREE.MeshStandardMaterial({
+  map: makeGrassTexture(), transparent: true, alphaTest: 0.15, side: THREE.DoubleSide, roughness: 1,
+});
+const grassGeo = new THREE.PlaneGeometry(1.6, 1.6);
+for (let i = 0; i < 90; i++) {
+  const a = Math.random() * Math.PI * 2;
+  const r = POND_RADIUS + 0.5 + Math.random() * 14;
+  const tuft = new THREE.Group();
+  for (let p = 0; p < 2; p++) {
+    const blade = new THREE.Mesh(grassGeo, grassMat);
+    blade.rotation.y = p * Math.PI / 2 + Math.random();
+    blade.position.y = 0.75;
+    tuft.add(blade);
+  }
+  tuft.position.set(Math.cos(a) * r, 0, Math.sin(a) * r);
+  const s = 0.7 + Math.random() * 0.8;
+  tuft.scale.set(s, s, s);
+  scene.add(tuft);
+}
+
+// a handful of trees on the far shore
+const trunkMat = new THREE.MeshStandardMaterial({ color: 0x5c4430, roughness: 1 });
+const leafMats = [0x37622e, 0x486e2f, 0x2e5530].map(c => new THREE.MeshStandardMaterial({ color: c, roughness: 0.9 }));
+for (let i = 0; i < 8; i++) {
+  const a = (i / 8) * Math.PI * 2 + Math.random() * 0.5;
+  const r = POND_RADIUS + 18 + Math.random() * 22;
+  const h = 5 + Math.random() * 4;
+  const tree = new THREE.Group();
+  const trunk = new THREE.Mesh(new THREE.CylinderGeometry(0.35, 0.55, h, 8), trunkMat);
+  trunk.position.y = h / 2;
+  tree.add(trunk);
+  for (let b = 0; b < 4; b++) {
+    const s = 1.8 + Math.random() * 1.6;
+    const blob = new THREE.Mesh(new THREE.SphereGeometry(s, 12, 10), leafMats[b % leafMats.length]);
+    blob.position.set((Math.random() - 0.5) * 2.6, h - 0.5 + Math.random() * 2.2, (Math.random() - 0.5) * 2.6);
+    tree.add(blob);
+  }
+  tree.position.set(Math.cos(a) * r, 0, Math.sin(a) * r);
+  tree.traverse(o => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; } });
+  scene.add(tree);
+}
+
+// fireflies drifting near the reeds at dusk
+const FIREFLY_COUNT = 70;
+const fireflyBase = [];
+const fireflyPos = new Float32Array(FIREFLY_COUNT * 3);
+for (let i = 0; i < FIREFLY_COUNT; i++) {
+  const a = Math.random() * Math.PI * 2;
+  const r = POND_RADIUS - 6 + Math.random() * 14;
+  fireflyBase.push({ x: Math.cos(a) * r, y: 0.6 + Math.random() * 2.2, z: Math.sin(a) * r, phase: Math.random() * Math.PI * 2 });
+}
+const fireflyGeo = new THREE.BufferGeometry();
+fireflyGeo.setAttribute('position', new THREE.BufferAttribute(fireflyPos, 3));
+const fireflies = new THREE.Points(fireflyGeo, new THREE.PointsMaterial({
+  color: 0xffe28a, size: 0.22, transparent: true, opacity: 0.9,
+  blending: THREE.AdditiveBlending, depthWrite: false, sizeAttenuation: true,
+}));
+scene.add(fireflies);
+function updateFireflies(t) {
+  for (let i = 0; i < FIREFLY_COUNT; i++) {
+    const b = fireflyBase[i];
+    fireflyPos[i * 3] = b.x + Math.sin(t * 0.7 + b.phase) * 1.4;
+    fireflyPos[i * 3 + 1] = b.y + Math.sin(t * 1.3 + b.phase * 2) * 0.5;
+    fireflyPos[i * 3 + 2] = b.z + Math.cos(t * 0.5 + b.phase) * 1.4;
+  }
+  fireflyGeo.attributes.position.needsUpdate = true;
+  fireflies.material.opacity = 0.55 + Math.sin(t * 2.4) * 0.35;
 }
 const rockMat = new THREE.MeshStandardMaterial({ color: 0x8d8d84, roughness: 1 });
 for (let i = 0; i < 18; i++) {
@@ -194,6 +439,25 @@ function makeFrog(color, name, nameColor = '#ffffff') {
   head.scale.set(1.05, 0.75, 0.9);
   head.position.set(0, 0.78, 0.62);
 
+  // darker spots along the back
+  const spotMat = new THREE.MeshStandardMaterial({
+    color: new THREE.Color(color).multiplyScalar(0.62), roughness: 0.7,
+  });
+  for (let i = 0; i < 6; i++) {
+    const spot = new THREE.Mesh(new THREE.SphereGeometry(0.07 + Math.random() * 0.07, 8, 6), spotMat);
+    spot.scale.y = 0.35;
+    const a = (Math.random() - 0.5) * 1.6;
+    spot.position.set(Math.sin(a) * 0.5, 0.52 + Math.cos(a) * 0.45, -0.35 + Math.random() * 0.9);
+    g.add(spot);
+  }
+
+  // throat sac — inflates when croaking
+  const sac = new THREE.Mesh(new THREE.SphereGeometry(0.26, 14, 12), bellyMat);
+  sac.position.set(0, 0.55, 0.78);
+  sac.scale.setScalar(0.01);
+  g.add(sac);
+
+  const eyes = [];
   const eyeWhiteMat = new THREE.MeshStandardMaterial({ color: 0xfffbe8, roughness: 0.3 });
   const pupilMat = new THREE.MeshStandardMaterial({ color: 0x14140f, roughness: 0.2 });
   for (const side of [-1, 1]) {
@@ -201,6 +465,7 @@ function makeFrog(color, name, nameColor = '#ffffff') {
     eye.position.set(side * 0.28, 1.1, 0.72);
     const pupil = new THREE.Mesh(new THREE.SphereGeometry(0.09, 10, 8), pupilMat);
     pupil.position.set(side * 0.28, 1.12, 0.86);
+    eyes.push(eye, pupil);
     g.add(eye, pupil);
 
     // back legs — big folded haunches
@@ -232,7 +497,29 @@ function makeFrog(color, name, nameColor = '#ffffff') {
   tongue.visible = false;
   g.add(tongue);
 
-  return { group: g, body, tongue, tongueT: 0, tongueTarget: new THREE.Vector3() };
+  return {
+    group: g, body, tongue, tongueT: 0, tongueTarget: new THREE.Vector3(),
+    eyes, sac, croakT: 0, blinkT: 1.5 + Math.random() * 3, blinking: 0,
+  };
+}
+
+// blinking + croak sac animation, shared by every frog on screen
+function updateFrogAmbient(frog, dt) {
+  frog.blinkT -= dt;
+  if (frog.blinkT <= 0) { frog.blinking = 0.16; frog.blinkT = 1.8 + Math.random() * 3.5; }
+  if (frog.blinking > 0) {
+    frog.blinking -= dt;
+    const squeeze = Math.sin(Math.min(1, 1 - frog.blinking / 0.16) * Math.PI);
+    for (const eye of frog.eyes) eye.scale.y = 1 - squeeze * 0.85;
+  } else {
+    for (const eye of frog.eyes) eye.scale.y = 1;
+  }
+  if (frog.croakT > 0) {
+    frog.croakT = Math.max(0, frog.croakT - dt * 2.2);
+    frog.sac.scale.setScalar(0.01 + Math.sin(frog.croakT * Math.PI) * 1.1);
+  } else {
+    frog.sac.scale.setScalar(0.01);
+  }
 }
 
 // ---------------------------------------------------------------- flies
@@ -243,9 +530,12 @@ const wingMat = new THREE.MeshStandardMaterial({ color: 0xffffff, transparent: t
 function spawnFly() {
   const fly = new THREE.Group();
   fly.add(new THREE.Mesh(flyGeo, flyMat));
+  const wings = [];
   for (const side of [-1, 1]) {
     const wing = new THREE.Mesh(new THREE.PlaneGeometry(0.2, 0.1), wingMat);
     wing.position.set(side * 0.12, 0.08, 0);
+    wing.userData.side = side;
+    wings.push(wing);
     fly.add(wing);
   }
   const r = 3 + Math.random() * (POND_RADIUS - 6);
@@ -255,6 +545,7 @@ function spawnFly() {
     phase: Math.random() * Math.PI * 2,
     center: fly.position.clone(),
     speed: 0.6 + Math.random() * 0.8,
+    wings,
   };
   scene.add(fly);
   flies.push(fly);
@@ -273,6 +564,8 @@ function updateFlies(t, dt) {
       1.2 + Math.sin(t * 3 + u.phase) * 0.6,
       u.center.z + Math.cos(t * 6 + u.phase) * 0.3
     );
+    const flap = Math.sin(t * 42 + u.phase) * 0.7;
+    for (const wing of u.wings) wing.rotation.z = flap * wing.userData.side;
   }
 }
 
@@ -336,6 +629,7 @@ addEventListener('keydown', e => {
 addEventListener('keyup', e => keys[e.code] = false);
 
 function hop(entity, dir, big) {
+  if (groundHeightAt(entity.pos.x, entity.pos.z) < WATER_Y) spawnRipple(entity.pos.x, entity.pos.z, 0.8);
   entity.vel.x = Math.sin(dir) * (big ? BIG_HOP_SPEED : HOP_SPEED);
   entity.vel.z = Math.cos(dir) * (big ? BIG_HOP_SPEED : HOP_SPEED);
   entity.vel.y = big ? BIG_HOP_UP : HOP_UP;
@@ -351,6 +645,7 @@ function stepPhysics(entity, group, dt) {
       entity.pos.y = gy;
       entity.vel.set(0, 0, 0);
       entity.grounded = true;
+      if (gy < WATER_Y) spawnRipple(entity.pos.x, entity.pos.z, 1.3); // splashdown
     }
   } else {
     // settle onto whatever is under us (pads bob, water drifts)
@@ -415,6 +710,7 @@ addEventListener('mousedown', () => { ensureAudio(); tryTongue(me, player, true)
 // ---------------------------------------------------------------- croak bubbles
 function doCroak(frog, isMe) {
   croakSound();
+  frog.croakT = 1;
   const bubble = makeNameSprite('ribbit!', '#ffd857');
   bubble.position.y = 2.8;
   frog.group.add(bubble);
@@ -601,11 +897,21 @@ function animate() {
   updateRemotes(dt);
   netUpdate(performance.now());
 
+  // ambience: blinking, croak sacs, ripples, fireflies, swaying reeds, drifting clouds
+  updateFrogAmbient(me, dt);
+  for (const o of others.values()) updateFrogAmbient(o.frog, dt);
+  updateRipples(dt);
+  updateFireflies(t);
+  waterUniforms.uTime.value = t;
+  for (const tail of cattails) tail.rotation.z = Math.sin(t * 1.1 + tail.userData.phase) * tail.userData.amp;
+  for (const cloud of clouds) {
+    cloud.userData.angle += dt * 0.004;
+    cloud.position.x = Math.cos(cloud.userData.angle) * cloud.userData.radius;
+    cloud.position.z = Math.sin(cloud.userData.angle) * cloud.userData.radius;
+  }
+
   // bob the lily pads
   for (const pad of pads) pad.position.y = WATER_Y + 0.1 + Math.sin(t * 1.2 + pad.userData.bobPhase) * 0.04;
-
-  // gentle water shimmer
-  water.material.color.setHSL(0.55, 0.55, 0.4 + Math.sin(t * 0.8) * 0.02);
 
   // camera follows behind the player
   const camTarget = new THREE.Vector3(player.pos.x, player.pos.y + 2.5, player.pos.z + 9);
