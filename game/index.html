@@ -37,16 +37,48 @@
   #toast {
     position: absolute; top: 30%; left: 50%; transform: translateX(-50%);
     font-size: 26px; font-weight: 800; color: #ffd857; opacity: 0;
-    transition: opacity .3s;
+    transition: opacity .3s; text-align: center; white-space: nowrap;
   }
+  #quest {
+    position: absolute; top: 96px; left: 18px; max-width: 260px;
+    background: rgba(8,20,14,.55); border: 1px solid rgba(184,255,122,.35);
+    border-radius: 10px; padding: 10px 14px; font-size: 13px; line-height: 1.45;
+  }
+  #quest h3 { margin: 0 0 4px; font-size: 12px; letter-spacing: 2px; color: #b8ff7a; }
+  #quest .obj { color: #ffd857; }
+  #prompt {
+    position: absolute; bottom: 58px; left: 50%; transform: translateX(-50%);
+    font-size: 14px; font-weight: 700; color: #ffd857;
+    background: rgba(0,0,0,.45); padding: 5px 14px; border-radius: 10px; display: none;
+  }
+  #dialog {
+    position: absolute; bottom: 90px; left: 50%; transform: translateX(-50%);
+    width: min(520px, 90vw); background: rgba(10,24,16,.92);
+    border: 2px solid #b8ff7a55; border-radius: 14px; padding: 16px 20px;
+    pointer-events: auto; display: none; font-size: 14px; line-height: 1.5;
+  }
+  #dialog h2 { margin: 0 0 6px; font-size: 15px; letter-spacing: 1px; color: #b8ff7a; }
+  #dialog .coins-line { color: #ffd857; font-size: 12px; margin-top: 2px; }
+  #dlgButtons { margin-top: 12px; display: flex; flex-wrap: wrap; gap: 8px; }
+  #dlgButtons button {
+    font: inherit; font-size: 13px; font-weight: 700; cursor: pointer;
+    color: #eafff2; background: #2e5e33; border: 1px solid #b8ff7a66;
+    border-radius: 8px; padding: 6px 14px;
+  }
+  #dlgButtons button:hover { background: #3e8e41; }
+  #dlgButtons button:disabled { opacity: .45; cursor: default; }
+  #dlgButtons button.shop-item { display: block; width: 100%; text-align: left; }
 </style>
 </head>
 <body>
 <div id="hud">
   <div id="title">CROAKFALL<small>POND WARS &mdash; PROTOTYPE</small></div>
-  <div id="score">FLIES EATEN <b id="flies">0</b><br><span id="pop">1 frog in the pond</span></div>
+  <div id="score">FLIES EATEN <b id="flies">0</b> &nbsp; 🪙 <b id="coins">0</b><br><span id="pop">1 frog in the pond</span></div>
   <div id="status" class="offline">OFFLINE &middot; BOT FROGS</div>
-  <div id="help">WASD hop &nbsp;&bull;&nbsp; SPACE big jump &nbsp;&bull;&nbsp; CLICK tongue-snap a fly &nbsp;&bull;&nbsp; C croak</div>
+  <div id="quest"></div>
+  <div id="help">WASD hop &nbsp;&bull;&nbsp; SPACE big jump &nbsp;&bull;&nbsp; CLICK tongue-snap a fly &nbsp;&bull;&nbsp; C croak &nbsp;&bull;&nbsp; E talk</div>
+  <div id="prompt"></div>
+  <div id="dialog"><h2 id="dlgName"></h2><div id="dlgText"></div><div class="coins-line" id="dlgCoins"></div><div id="dlgButtons"></div></div>
   <div id="toast"></div>
 </div>
 <script type="module">
@@ -611,6 +643,10 @@ const player = {
 };
 
 function groundHeightAt(x, z) {
+  for (const isle of islets) {
+    const dx = x - isle.x, dz = z - isle.z;
+    if (dx * dx + dz * dz < isle.r * isle.r) return WATER_Y + isle.h;
+  }
   for (const pad of pads) {
     const dx = x - pad.position.x, dz = z - pad.position.z;
     if (dx * dx + dz * dz < pad.userData.radius * pad.userData.radius) return pad.position.y + 0.06;
@@ -624,15 +660,17 @@ addEventListener('keydown', e => {
   keys[e.code] = true;
   ensureAudio();
   if (e.code === 'KeyC') doCroak(me, true);
+  if (e.code === 'KeyE') tryInteract();
+  if (e.code === 'Escape') closeDialog();
   if (e.code === 'Space') e.preventDefault();
 });
 addEventListener('keyup', e => keys[e.code] = false);
 
-function hop(entity, dir, big) {
+function hop(entity, dir, big, mult = 1) {
   if (groundHeightAt(entity.pos.x, entity.pos.z) < WATER_Y) spawnRipple(entity.pos.x, entity.pos.z, 0.8);
-  entity.vel.x = Math.sin(dir) * (big ? BIG_HOP_SPEED : HOP_SPEED);
-  entity.vel.z = Math.cos(dir) * (big ? BIG_HOP_SPEED : HOP_SPEED);
-  entity.vel.y = big ? BIG_HOP_UP : HOP_UP;
+  entity.vel.x = Math.sin(dir) * (big ? BIG_HOP_SPEED : HOP_SPEED) * mult;
+  entity.vel.z = Math.cos(dir) * (big ? BIG_HOP_SPEED : HOP_SPEED) * mult;
+  entity.vel.y = (big ? BIG_HOP_UP : HOP_UP) * mult;
   entity.grounded = false;
 }
 
@@ -667,9 +705,10 @@ function tryTongue(frog, entity, isMe) {
   let best = null, bestScore = Infinity;
   const fwd = new THREE.Vector3(Math.sin(entity.heading), 0, Math.cos(entity.heading));
   for (const fly of flies) {
+    if (!isMe && fly.userData.golden) continue; // the Golden Fly is the hero's to catch
     const to = fly.position.clone().sub(entity.pos);
     const dist = to.length();
-    if (dist > TONGUE_RANGE) continue;
+    if (dist > (isMe ? tongueRange : TONGUE_RANGE)) continue;
     const facing = fwd.dot(to.clone().setY(0).normalize());
     if (isMe && facing < 0.2) continue; // player must roughly face the fly
     if (dist < bestScore) { bestScore = dist; best = fly; }
@@ -677,15 +716,18 @@ function tryTongue(frog, entity, isMe) {
   if (!best) return false;
   frog.tongueT = 1;
   frog.tongueTarget.copy(best.position);
-  // eat it: respawn elsewhere
+  const golden = !!best.userData.golden;
   scene.remove(best);
   flies.splice(flies.indexOf(best), 1);
-  spawnFly();
+  if (!golden) spawnFly(); // ordinary flies respawn elsewhere
   if (isMe) {
     player.score++;
     document.getElementById('flies').textContent = player.score;
+    addCoins(golden ? 5 : 1);
     slurpSound();
-    if (player.score > 0 && player.score % 10 === 0) toast('RIBBIT LEVEL UP!');
+    onFlyEaten(golden);
+    if (golden) toast('✨ THE GOLDEN FLY! ✨');
+    else if (player.score % 10 === 0) toast('RIBBIT LEVEL UP!');
   }
   return true;
 }
@@ -705,7 +747,11 @@ function updateTongue(frog, dt) {
   frog.tongue.rotateX(Math.PI / 2);
 }
 
-addEventListener('mousedown', () => { ensureAudio(); tryTongue(me, player, true); });
+addEventListener('mousedown', e => {
+  if (e.target.closest && e.target.closest('#dialog')) return; // UI clicks aren't tongue-snaps
+  ensureAudio();
+  tryTongue(me, player, true);
+});
 
 // ---------------------------------------------------------------- croak bubbles
 function doCroak(frog, isMe) {
@@ -725,11 +771,449 @@ function toast(msg) {
   setTimeout(() => el.style.opacity = 0, 1400);
 }
 
+// ---------------------------------------------------------------- save data
+const SAVE_KEY = 'croakfall_save_v1';
+const save = Object.assign(
+  { coins: 0, owned: [], hat: null, questIndex: 0, questStage: 'none', questProgress: 0, stones: [false, false, false] },
+  JSON.parse(localStorage.getItem(SAVE_KEY) || '{}')
+);
+function persist() { localStorage.setItem(SAVE_KEY, JSON.stringify(save)); }
+function addCoins(n) {
+  save.coins += n;
+  document.getElementById('coins').textContent = save.coins;
+  persist();
+}
+document.getElementById('coins').textContent = save.coins;
+
+// ---------------------------------------------------------------- hats
+function buildHat(id) {
+  const g = new THREE.Group();
+  if (id === 'lily') {
+    const pad = new THREE.Mesh(new THREE.CylinderGeometry(0.34, 0.34, 0.06, 18, 1, false, 0.3, Math.PI * 2 - 0.3),
+      new THREE.MeshStandardMaterial({ color: 0x3e8e41, roughness: 0.8 }));
+    const bud = new THREE.Mesh(new THREE.SphereGeometry(0.09, 8, 6),
+      new THREE.MeshStandardMaterial({ color: 0xffc4d6, roughness: 0.6 }));
+    bud.position.y = 0.09;
+    g.add(pad, bud);
+  } else if (id === 'top') {
+    const black = new THREE.MeshStandardMaterial({ color: 0x1c1c22, roughness: 0.4 });
+    const brim = new THREE.Mesh(new THREE.CylinderGeometry(0.32, 0.32, 0.04, 16), black);
+    const crown = new THREE.Mesh(new THREE.CylinderGeometry(0.2, 0.2, 0.38, 16), black);
+    crown.position.y = 0.2;
+    const band = new THREE.Mesh(new THREE.CylinderGeometry(0.205, 0.205, 0.07, 16),
+      new THREE.MeshStandardMaterial({ color: 0xb03040, roughness: 0.5 }));
+    band.position.y = 0.07;
+    g.add(brim, crown, band);
+  } else if (id === 'wizard') {
+    const purple = new THREE.MeshStandardMaterial({ color: 0x5e35b1, roughness: 0.6 });
+    const brim = new THREE.Mesh(new THREE.CylinderGeometry(0.36, 0.36, 0.04, 16), purple);
+    const cone = new THREE.Mesh(new THREE.ConeGeometry(0.22, 0.55, 16), purple);
+    cone.position.y = 0.28;
+    cone.rotation.y = 0.4;
+    g.add(brim, cone);
+  } else if (id === 'crown') {
+    const gold = new THREE.MeshStandardMaterial({ color: 0xffd857, roughness: 0.25, metalness: 0.7, emissive: 0x332200 });
+    const ring = new THREE.Mesh(new THREE.CylinderGeometry(0.24, 0.26, 0.14, 16), gold);
+    g.add(ring);
+    for (let i = 0; i < 5; i++) {
+      const a = (i / 5) * Math.PI * 2;
+      const spike = new THREE.Mesh(new THREE.ConeGeometry(0.06, 0.16, 6), gold);
+      spike.position.set(Math.cos(a) * 0.24, 0.14, Math.sin(a) * 0.24);
+      g.add(spike);
+    }
+  } else return null;
+  g.traverse(o => { if (o.isMesh) o.castShadow = true; });
+  g.position.set(0, 1.26, 0.5);
+  g.rotation.x = -0.15;
+  return g;
+}
+function equipHat(frog, hatId) {
+  if (frog.hatMesh) { frog.group.remove(frog.hatMesh); frog.hatMesh = null; }
+  frog.hatId = hatId || null;
+  if (hatId) {
+    frog.hatMesh = buildHat(hatId);
+    if (frog.hatMesh) frog.group.add(frog.hatMesh);
+  }
+}
+
+// ---------------------------------------------------------------- islets & NPCs
+const islets = [
+  { x: 12, z: 14, r: 3.2, h: 0.55 },   // Elder Toad's rock
+  { x: -16, z: 10, r: 3.5, h: 0.5 },   // Madame Bufo's Bazaar
+];
+const isletMat = new THREE.MeshStandardMaterial({ color: 0x9a938a, roughness: 1 });
+for (const isle of islets) {
+  const rock = new THREE.Mesh(new THREE.CylinderGeometry(isle.r, isle.r + 0.6, isle.h + 0.5, 24), isletMat);
+  rock.position.set(isle.x, WATER_Y + isle.h - (isle.h + 0.5) / 2 + 0.02, isle.z);
+  rock.castShadow = rock.receiveShadow = true;
+  scene.add(rock);
+}
+
+const elder = makeFrog(0x8d6e42, 'Elder Toad', '#ffd857');
+elder.group.scale.setScalar(1.45);
+elder.group.position.set(islets[0].x, WATER_Y + islets[0].h, islets[0].z);
+elder.group.rotation.y = Math.atan2(-islets[0].x, -islets[0].z); // face pond center
+// a wispy white beard for the old fellow
+const beardMat = new THREE.MeshStandardMaterial({ color: 0xf2ede0, roughness: 1 });
+for (let i = 0; i < 3; i++) {
+  const tuftB = new THREE.Mesh(new THREE.SphereGeometry(0.09 - i * 0.02, 8, 6), beardMat);
+  tuftB.position.set(0, 0.52 - i * 0.12, 0.86);
+  elder.group.add(tuftB);
+}
+scene.add(elder.group);
+const elderMarker = makeNameSprite('!', '#ffd857');
+elderMarker.scale.set(1.2, 0.9, 1);
+elderMarker.position.y = 2.6;
+elder.group.add(elderMarker);
+
+const vendor = makeFrog(0x26a69a, 'Madame Bufo', '#ffb37d');
+vendor.group.scale.setScalar(1.15);
+vendor.group.position.set(islets[1].x, WATER_Y + islets[1].h, islets[1].z);
+vendor.group.rotation.y = Math.atan2(-islets[1].x, -islets[1].z);
+scene.add(vendor.group);
+// market stall behind her: posts, counter, striped awning
+const stall = new THREE.Group();
+const wood = new THREE.MeshStandardMaterial({ color: 0x7a5a38, roughness: 1 });
+for (const sx of [-1.2, 1.2]) {
+  const post = new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.07, 2.2, 8), wood);
+  post.position.set(sx, 1.1, 0);
+  stall.add(post);
+}
+const counter = new THREE.Mesh(new THREE.BoxGeometry(2.7, 0.12, 0.9), wood);
+counter.position.y = 0.85;
+stall.add(counter);
+const awning = new THREE.Mesh(new THREE.BoxGeometry(2.9, 0.06, 1.3),
+  new THREE.MeshStandardMaterial({ color: 0xd85f5f, roughness: 0.8 }));
+awning.position.y = 2.25;
+awning.rotation.x = 0.12;
+stall.add(awning);
+// display hats on the counter
+for (const [i, hid] of ['top', 'wizard', 'crown'].entries()) {
+  const disp = buildHat(hid);
+  disp.position.set(-0.8 + i * 0.8, 0.98, 0);
+  disp.rotation.x = 0;
+  stall.add(disp);
+}
+stall.traverse(o => { if (o.isMesh) o.castShadow = true; });
+const stallAngle = Math.atan2(-islets[1].x, -islets[1].z);
+stall.position.set(islets[1].x - Math.sin(stallAngle) * 1.6, WATER_Y + islets[1].h, islets[1].z - Math.cos(stallAngle) * 1.6);
+stall.rotation.y = stallAngle;
+scene.add(stall);
+
+const npcFrogs = [elder, vendor];
+
+// ---------------------------------------------------------------- whispering stones
+const stones = [];
+const stoneAngles = [0.6, 2.5, 4.5];
+for (const [i, a] of stoneAngles.entries()) {
+  const stone = new THREE.Mesh(
+    new THREE.BoxGeometry(0.9, 2.6, 0.5),
+    new THREE.MeshStandardMaterial({ color: 0x5a6a70, roughness: 0.9, emissive: 0x1de9b6, emissiveIntensity: 0.12 })
+  );
+  const r = POND_RADIUS - 4;
+  stone.position.set(Math.cos(a) * r, 1.1, Math.sin(a) * r);
+  stone.rotation.y = -a;
+  stone.rotation.z = (i - 1) * 0.08;
+  stone.castShadow = true;
+  scene.add(stone);
+  stones.push(stone);
+  if (save.stones[i]) stone.material.emissiveIntensity = 0.85;
+}
+
+// ---------------------------------------------------------------- quests & story
+const QUESTS = [
+  {
+    title: 'A Hungry Start',
+    objective: n => `Eat flies (${n}/5)`,
+    target: 5,
+    reward: 10,
+    offer: 'Ah, a young leaper. Long ago this pond rang with the GREAT CROAK — a song so deep the herons dared not land. When its last verse was forgotten, the magic sank into the mud. My memory wakes on a full stomach... eat 5 flies and show me this pond still feeds its heroes.',
+    remind: 'Full bellies, full memories. Snap up those flies, young one.',
+    done: 'Ha! A tongue like your grandmother’s. Yes... the FIRST VERSE returns to me: ♪ Deep is the mud and sweet is the rain ♪',
+  },
+  {
+    title: 'The Whispering Stones',
+    objective: n => `Visit the glowing stones (${n}/3)`,
+    target: 3,
+    reward: 15,
+    offer: 'Three WHISPERING STONES stand at the water’s edge, older than any toad. Sit beside each and listen — together they hum the second verse. Visit all three and return.',
+    remind: 'The stones glow teal at the pond’s rim. Sit close. Listen with your skin, as frogs do.',
+    done: 'Yes... YES! The stones still sing! The SECOND VERSE: ♪ Still is the water that carries the song ♪',
+  },
+  {
+    title: 'The Golden Fly',
+    objective: () => 'Catch the Golden Fly',
+    target: 1,
+    reward: 30,
+    offer: 'The final verse hides inside the GOLDEN FLY — quick as sunlight on water, sweet as summer’s last evening. Catch it, and the Great Croak returns to this pond. Go, hero. Make an old toad sing.',
+    remind: 'The Golden Fly gleams somewhere over the water. Face it, get close, and SNAP.',
+    done: 'THE GREAT CROAK RETURNS! ♪ RIBBIT-OHHHM ♪ Sing, pond, SING!',
+  },
+];
+const EPILOGUE = 'The pond sings again thanks to you, hero. Rest your legs — or visit Madame Bufo’s Bazaar. A frog who saves a pond deserves a crown.';
+
+const questEl = document.getElementById('quest');
+function renderQuest() {
+  if (save.questIndex >= QUESTS.length) {
+    questEl.innerHTML = '<h3>STORY COMPLETE</h3>The Great Croak echoes once more. ✔';
+    return;
+  }
+  const q = QUESTS[save.questIndex];
+  if (save.questStage === 'none') {
+    questEl.innerHTML = '<h3>QUEST</h3>Speak with <b>Elder Toad</b> on his rock. <span class="obj">[E] to talk</span>';
+  } else if (save.questStage === 'active') {
+    questEl.innerHTML = `<h3>QUEST — ${q.title}</h3><span class="obj">${q.objective(save.questProgress)}</span>`;
+  } else {
+    questEl.innerHTML = `<h3>QUEST — ${q.title}</h3><span class="obj">✔ Return to Elder Toad</span>`;
+  }
+}
+renderQuest();
+
+// the Golden Fly (quest 3 target) — lives in the normal flies array, bots won't touch it
+let goldenFly = null;
+function spawnGoldenFly() {
+  if (goldenFly) return;
+  spawnFly();
+  goldenFly = flies[flies.length - 1];
+  goldenFly.userData.golden = true;
+  goldenFly.userData.speed = 1.7;
+  goldenFly.scale.setScalar(1.7);
+  goldenFly.traverse(o => {
+    if (o.isMesh && o.geometry !== undefined) {
+      o.material = o.material.clone();
+      if (o.material.opacity === undefined || !o.material.transparent) {
+        o.material.color.set(0xffd857);
+        o.material.emissive = new THREE.Color(0x996600);
+      }
+    }
+  });
+}
+if (save.questIndex === 2 && save.questStage === 'active') spawnGoldenFly();
+
+function questObjectiveDone() {
+  save.questStage = 'turnin';
+  save.questProgress = QUESTS[save.questIndex].target;
+  persist();
+  renderQuest();
+  toast('✔ Return to Elder Toad');
+}
+
+function onFlyEaten(golden) {
+  if (save.questIndex === 0 && save.questStage === 'active') {
+    save.questProgress++;
+    persist();
+    renderQuest();
+    if (save.questProgress >= QUESTS[0].target) questObjectiveDone();
+  }
+  if (golden) {
+    goldenFly = null;
+    if (save.questIndex === 2 && save.questStage === 'active') questObjectiveDone();
+  }
+}
+
+function checkStones() {
+  if (save.questIndex !== 1 || save.questStage !== 'active') return;
+  for (const [i, stone] of stones.entries()) {
+    if (save.stones[i]) continue;
+    if (stone.position.distanceTo(player.pos) < 4.5) {
+      save.stones[i] = true;
+      save.questProgress++;
+      stone.material.emissiveIntensity = 0.85;
+      spawnRipple(stone.position.x, stone.position.z, 1.5);
+      croakSound();
+      toast(`The stone hums an ancient note... (${save.questProgress}/3)`);
+      persist();
+      renderQuest();
+      if (save.questProgress >= 3) questObjectiveDone();
+    }
+  }
+}
+
+function theGreatCroak() {
+  doCroak(me, true);
+  let delay = 200;
+  for (const o of others.values()) {
+    setTimeout(() => doCroak(o.frog, false), delay);
+    delay += 180;
+  }
+  doCroak(elder, false);
+  doCroak(vendor, false);
+  for (let i = 0; i < 10; i++) {
+    const a = Math.random() * Math.PI * 2, r = Math.random() * POND_RADIUS * 0.8;
+    setTimeout(() => spawnRipple(Math.cos(a) * r, Math.sin(a) * r, 1 + Math.random() * 2), i * 150);
+  }
+  toast('♪ THE GREAT CROAK ECHOES ACROSS THE POND ♪');
+}
+
+// ---------------------------------------------------------------- shop
+const SHOP = [
+  { id: 'lily', name: 'Lily Hat', price: 10, desc: 'Fresh from the pond.' },
+  { id: 'top', name: 'Top Hat', price: 20, desc: 'For the distinguished amphibian.' },
+  { id: 'wizard', name: 'Wizard Hat', price: 25, desc: 'Smells faintly of swamp magic.' },
+  { id: 'crown', name: 'Royal Crown', price: 40, desc: 'Every pond needs a monarch.' },
+  { id: 'tongue', name: 'Long Tongue', price: 30, desc: '+3 m tongue reach.', upgrade: true },
+  { id: 'legs', name: 'Spring Legs', price: 30, desc: '+20% hop power.', upgrade: true },
+];
+let tongueRange = TONGUE_RANGE + (save.owned.includes('tongue') ? 3 : 0);
+const hopMult = () => save.owned.includes('legs') ? 1.2 : 1;
+
+// ---------------------------------------------------------------- dialog UI
+const dlg = document.getElementById('dialog');
+const dlgName = document.getElementById('dlgName');
+const dlgText = document.getElementById('dlgText');
+const dlgCoins = document.getElementById('dlgCoins');
+const dlgButtons = document.getElementById('dlgButtons');
+let dialogOpen = null;
+
+function closeDialog() { dlg.style.display = 'none'; dialogOpen = null; }
+function button(label, onClick, opts = {}) {
+  const b = document.createElement('button');
+  b.textContent = label;
+  if (opts.disabled) b.disabled = true;
+  if (opts.cls) b.className = opts.cls;
+  b.onclick = onClick;
+  dlgButtons.appendChild(b);
+  return b;
+}
+
+function openElderDialog() {
+  dialogOpen = 'elder';
+  dlg.style.display = 'block';
+  dlgName.textContent = 'Elder Toad';
+  dlgCoins.textContent = '';
+  dlgButtons.innerHTML = '';
+  if (save.questIndex >= QUESTS.length) {
+    dlgText.textContent = EPILOGUE;
+    button('Farewell', closeDialog);
+    return;
+  }
+  const q = QUESTS[save.questIndex];
+  if (save.questStage === 'none') {
+    dlgText.textContent = q.offer;
+    button('Accept quest: ' + q.title, () => {
+      save.questStage = 'active';
+      save.questProgress = 0;
+      if (save.questIndex === 1) save.stones = [false, false, false];
+      if (save.questIndex === 2) spawnGoldenFly();
+      persist();
+      renderQuest();
+      closeDialog();
+      toast('QUEST ACCEPTED — ' + q.title);
+    });
+    button('Not yet', closeDialog);
+  } else if (save.questStage === 'active') {
+    dlgText.textContent = q.remind;
+    button('I’m on it', closeDialog);
+  } else {
+    dlgText.textContent = q.done;
+    button(`Complete (+${q.reward} 🪙)`, () => {
+      addCoins(q.reward);
+      const finished = save.questIndex === QUESTS.length - 1;
+      save.questIndex++;
+      save.questStage = 'none';
+      save.questProgress = 0;
+      persist();
+      renderQuest();
+      closeDialog();
+      if (finished) theGreatCroak();
+      else toast(`+${q.reward} 🪙`);
+    });
+  }
+}
+
+function openVendorDialog() {
+  dialogOpen = 'vendor';
+  dlg.style.display = 'block';
+  dlgName.textContent = 'Madame Bufo’s Bazaar';
+  dlgText.textContent = 'Welcome, dearie. Finest hats and frog-craft this side of the reeds. Coins for flies, treasures for coins — that’s the pond’s way.';
+  dlgCoins.textContent = `You have ${save.coins} 🪙`;
+  dlgButtons.innerHTML = '';
+  for (const item of SHOP) {
+    const owned = save.owned.includes(item.id);
+    let label, action, disabled = false;
+    if (item.upgrade) {
+      if (owned) { label = `✔ ${item.name} — ${item.desc}`; disabled = true; }
+      else {
+        label = `${item.name} — ${item.price} 🪙 — ${item.desc}`;
+        disabled = save.coins < item.price;
+        action = () => {
+          addCoins(-item.price);
+          save.owned.push(item.id);
+          tongueRange = TONGUE_RANGE + (save.owned.includes('tongue') ? 3 : 0);
+          persist();
+          toast(item.name + ' acquired!');
+          openVendorDialog();
+        };
+      }
+    } else if (!owned) {
+      label = `${item.name} — ${item.price} 🪙 — ${item.desc}`;
+      disabled = save.coins < item.price;
+      action = () => {
+        addCoins(-item.price);
+        save.owned.push(item.id);
+        save.hat = item.id;
+        equipHat(me, item.id);
+        sendHatNow();
+        persist();
+        toast('Looking sharp in the ' + item.name + '!');
+        openVendorDialog();
+      };
+    } else if (save.hat === item.id) {
+      label = `✔ ${item.name} (wearing) — take off`;
+      action = () => { save.hat = null; equipHat(me, null); sendHatNow(); persist(); openVendorDialog(); };
+    } else {
+      label = `${item.name} (owned) — wear`;
+      action = () => { save.hat = item.id; equipHat(me, item.id); sendHatNow(); persist(); openVendorDialog(); };
+    }
+    button(label, action, { disabled, cls: 'shop-item' });
+  }
+  button('Leave', closeDialog);
+}
+
+// ---------------------------------------------------------------- interaction
+const promptEl = document.getElementById('prompt');
+function nearbyNpc() {
+  if (elder.group.position.distanceTo(player.pos) < 5) return 'elder';
+  if (vendor.group.position.distanceTo(player.pos) < 5) return 'vendor';
+  return null;
+}
+function tryInteract() {
+  if (dialogOpen) { closeDialog(); return; }
+  const npc = nearbyNpc();
+  if (npc === 'elder') openElderDialog();
+  else if (npc === 'vendor') openVendorDialog();
+}
+
+function questTick(dt, t) {
+  checkStones();
+  // interact prompt + auto-close dialog when hopping away
+  const npc = nearbyNpc();
+  if (npc && !dialogOpen) {
+    promptEl.style.display = 'block';
+    promptEl.textContent = npc === 'elder' ? '[E] Talk to Elder Toad' : '[E] Browse Madame Bufo’s Bazaar';
+  } else {
+    promptEl.style.display = 'none';
+  }
+  if (dialogOpen && !npc) closeDialog();
+  // quest marker over the Elder: visible when he has something for you
+  const hasBang = save.questIndex < QUESTS.length && save.questStage !== 'active';
+  elderMarker.visible = hasBang;
+  elderMarker.position.y = 2.6 + Math.sin(t * 2.5) * 0.12;
+  for (const npcFrog of npcFrogs) updateFrogAmbient(npcFrog, dt);
+  if (Math.random() < dt * 0.03) doCroak(elder, false);
+  // golden fly glimmer
+  if (goldenFly) goldenFly.rotation.y = t * 3;
+}
+
+// apply saved gear
+equipHat(me, save.hat);
+
 // ---------------------------------------------------------------- other frogs: bots OR network players
 const others = new Map(); // id -> {frog, entity, isBot, targetPos, name}
 
-function addOther(id, name, color, isBot) {
+function addOther(id, name, color, isBot, hat) {
   const frog = makeFrog(color, name, isBot ? '#cfd8dc' : '#7dffb0');
+  if (hat) equipHat(frog, hat);
   const r = 5 + Math.random() * (POND_RADIUS - 10);
   const a = Math.random() * Math.PI * 2;
   const entity = {
@@ -794,7 +1278,7 @@ function connect() {
   try { net.ws = new WebSocket(serverUrl); } catch { return spawnBots(); }
   net.ws.onopen = () => {
     opened = true;
-    net.ws.send(JSON.stringify({ type: 'join', name: myName, color: myColor }));
+    net.ws.send(JSON.stringify({ type: 'join', name: myName, color: myColor, hat: save.hat }));
     statusEl.textContent = 'ONLINE · ' + serverUrl.replace(/^wss?:\/\//, '');
     statusEl.className = 'online';
   };
@@ -802,9 +1286,9 @@ function connect() {
     const msg = JSON.parse(ev.data);
     if (msg.type === 'welcome') {
       net.id = msg.id;
-      for (const p of msg.players) if (p.id !== net.id) addOther(p.id, p.name, p.color, false);
+      for (const p of msg.players) if (p.id !== net.id) addOther(p.id, p.name, p.color, false, p.hat);
     } else if (msg.type === 'join' && msg.id !== net.id) {
-      addOther(msg.id, msg.name, msg.color, false);
+      addOther(msg.id, msg.name, msg.color, false, msg.hat);
       toast(msg.name + ' hopped in!');
     } else if (msg.type === 'leave') {
       removeOther(msg.id);
@@ -812,7 +1296,11 @@ function connect() {
       for (const p of msg.players) {
         if (p.id === net.id) continue;
         const o = others.get(p.id);
-        if (o) { o.netPos.set(p.x, p.y, p.z); o.netHeading = p.ry; }
+        if (o) {
+          o.netPos.set(p.x, p.y, p.z);
+          o.netHeading = p.ry;
+          if ((p.hat || null) !== (o.frog.hatId || null)) equipHat(o.frog, p.hat);
+        }
       }
     } else if (msg.type === 'croak') {
       const o = others.get(msg.id);
@@ -838,7 +1326,8 @@ function spawnBots() {
     let name;
     do { name = FROG_NAMES[Math.floor(Math.random() * FROG_NAMES.length)]; } while (used.has(name));
     used.add(name);
-    addOther('bot' + i, name, FROG_COLORS[(i * 3 + 1) % FROG_COLORS.length], true);
+    const botHat = Math.random() < 0.4 ? ['lily', 'top', 'wizard'][Math.floor(Math.random() * 3)] : null;
+    addOther('bot' + i, name, FROG_COLORS[(i * 3 + 1) % FROG_COLORS.length], true, botHat);
   }
 }
 
@@ -850,7 +1339,12 @@ function netUpdate(now) {
     type: 'state',
     x: +player.pos.x.toFixed(2), y: +player.pos.y.toFixed(2), z: +player.pos.z.toFixed(2),
     ry: +player.heading.toFixed(2),
+    hat: save.hat,
   }));
+}
+
+function sendHatNow() {
+  if (net.ws && net.ws.readyState === 1) net.lastSend = 0; // flush hat change on next tick
 }
 
 function updateRemotes(dt) {
@@ -870,6 +1364,9 @@ function updateRemotes(dt) {
 
 connect();
 
+// tiny debug handle for automated tests
+window.__cf = { player, save, me, flies, others, onFlyEaten };
+
 // ---------------------------------------------------------------- main loop
 const clock = new THREE.Clock();
 function animate() {
@@ -886,7 +1383,7 @@ function animate() {
   if (keys.KeyD || keys.ArrowRight) ix += 1;
   if (player.grounded && player.hopCooldown <= 0 && (ix || iz || keys.Space)) {
     if (ix || iz) player.heading = Math.atan2(ix, iz) + Math.PI; // camera-relative-ish: W = away from camera
-    hop(player, player.heading, !!keys.Space);
+    hop(player, player.heading, !!keys.Space, hopMult());
     player.hopCooldown = 0.28;
   }
   stepPhysics(player, me.group, dt);
@@ -896,6 +1393,9 @@ function animate() {
   updateBots(dt);
   updateRemotes(dt);
   netUpdate(performance.now());
+
+  // quests, NPCs, interaction prompts
+  questTick(dt, t);
 
   // ambience: blinking, croak sacs, ripples, fireflies, swaying reeds, drifting clouds
   updateFrogAmbient(me, dt);

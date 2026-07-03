@@ -22,6 +22,9 @@ bots. Eat flies, out-hop rivals, claim lily pads, and croak your dominance.
 | Name tags, player count, online/offline HUD | ✅ |
 | Golden-hour rendering: gradient sky + sun glow, shader water with swell/sparkle, ACES tone mapping | ✅ |
 | Ambience: splash ripples, fireflies, drifting clouds, swaying cattails, blinking eyes, croak throat sac | ✅ |
+| Story quest chain: Elder Toad NPC, 3 quests ("The Great Croak"), Whispering Stones, Golden Fly hunt | ✅ |
+| Vendor: Madame Bufo's Bazaar — 4 wearable hats + 2 upgrades (Long Tongue, Spring Legs), coin economy | ✅ |
+| Hats sync over multiplayer; progress/coins/gear persist in localStorage | ✅ |
 
 Zero build step. Three.js is vendored (`game/vendor/`), so `game/index.html`
 runs from disk with no install. The server is optional — without it the pond
@@ -31,8 +34,25 @@ fills with bots.
 
 - **WASD / arrows** — hop
 - **Space** — big jump
-- **Click** — tongue-snap a fly you're facing (9 m range)
+- **Click** — tongue-snap a fly you're facing (9 m range, 12 m with Long Tongue)
 - **C** — croak
+- **E** — talk to NPCs / browse the shop
+
+### Story: "The Great Croak"
+
+Elder Toad waits on his rock islet. Long ago the pond rang with the Great
+Croak — a song that kept the herons away — until its verses were forgotten.
+The quest chain restores it:
+
+1. **A Hungry Start** — eat 5 flies (10 🪙)
+2. **The Whispering Stones** — visit the 3 glowing stones at the pond's rim (15 🪙)
+3. **The Golden Fly** — catch the shimmering golden fly (30 🪙, triggers the
+   pond-wide Great Croak finale)
+
+Coins also drop 1-per-fly. **Madame Bufo's Bazaar** (the stall islet) sells
+the Lily Hat, Top Hat, Wizard Hat, and Royal Crown, plus two gameplay
+upgrades: Long Tongue (+3 m) and Spring Legs (+20% hop). Hats are visible to
+other players online; progress, coins, and gear persist in localStorage.
 
 ### Running it
 

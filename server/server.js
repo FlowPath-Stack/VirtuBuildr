@@ -33,6 +33,7 @@ wss.on('connection', ws => {
         id: 'p' + nextId++,
         name: String(msg.name || 'Frog').slice(0, 24),
         color: Number.isInteger(msg.color) ? msg.color : 0x4caf50,
+        hat: typeof msg.hat === 'string' ? msg.hat.slice(0, 16) : null,
         x: 0, y: 0, z: 0, ry: 0,
       };
       players.set(ws, player);
@@ -54,6 +55,7 @@ wss.on('connection', ws => {
       player.y = +msg.y || 0;
       player.z = +msg.z || 0;
       player.ry = +msg.ry || 0;
+      player.hat = typeof msg.hat === 'string' ? msg.hat.slice(0, 16) : null;
     } else if (msg.type === 'croak') {
       broadcast({ type: 'croak', id: player.id }, ws);
     }
@@ -72,7 +74,7 @@ setInterval(() => {
   if (players.size < 2) return;
   broadcast({
     type: 'state',
-    players: [...players.values()].map(p => ({ id: p.id, x: p.x, y: p.y, z: p.z, ry: p.ry })),
+    players: [...players.values()].map(p => ({ id: p.id, x: p.x, y: p.y, z: p.z, ry: p.ry, hat: p.hat })),
   });
 }, TICK_MS);
 
